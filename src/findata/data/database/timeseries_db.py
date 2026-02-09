@@ -327,9 +327,7 @@ class TimeSeriesDB:
                 records
             )
 
-            self.conn.commit()
-
-            # Update risk factor metadata
+            # Update risk factor metadata in same transaction
             cursor.execute(
                 """
                 UPDATE risk_factors

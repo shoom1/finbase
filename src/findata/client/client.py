@@ -551,12 +551,13 @@ class DataClient:
             >>> # Get historical composition
             >>> sp500_2020 = client.get_index_constituents('SP500', as_of_date='2020-01-01')
         """
-        index_db = IndexDB(self.db)
+        with self._get_db() as db:
+            index_db = IndexDB(db)
 
-        if as_of_date is None:
-            return index_db.get_current_constituents(index_code)
-        else:
-            return index_db.get_historical_constituents(index_code, as_of_date)
+            if as_of_date is None:
+                return index_db.get_current_constituents(index_code)
+            else:
+                return index_db.get_historical_constituents(index_code, as_of_date)
 
     def list_indices(self) -> pd.DataFrame:
         """
@@ -569,8 +570,9 @@ class DataClient:
             >>> indices = client.list_indices()
             >>> print(indices[['index_code', 'index_name', 'last_updated']])
         """
-        index_db = IndexDB(self.db)
-        return index_db.list_indices()
+        with self._get_db() as db:
+            index_db = IndexDB(db)
+            return index_db.list_indices()
 
     def is_index_member(
         self,
@@ -594,8 +596,9 @@ class DataClient:
             >>> client.is_index_member('TSLA', 'SP500', date='2020-12-01')  # False
             >>> client.is_index_member('TSLA', 'SP500', date='2021-01-01')  # True
         """
-        index_db = IndexDB(self.db)
-        return index_db.is_index_member(symbol, index_code, check_date=date)
+        with self._get_db() as db:
+            index_db = IndexDB(db)
+            return index_db.is_index_member(symbol, index_code, check_date=date)
 
     def get_index_changes(
         self,
@@ -620,5 +623,6 @@ class DataClient:
             >>> additions = changes[changes['change_type'] == 'added']
             >>> removals = changes[changes['change_type'] == 'removed']
         """
-        index_db = IndexDB(self.db)
-        return index_db.get_index_changes(index_code, start_date, end_date)
+        with self._get_db() as db:
+            index_db = IndexDB(db)
+            return index_db.get_index_changes(index_code, start_date, end_date)
