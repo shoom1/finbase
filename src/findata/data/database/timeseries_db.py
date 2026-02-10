@@ -279,42 +279,29 @@ class TimeSeriesDB:
             if close_column not in df.columns:
                 raise ValidationError(f"Close column '{close_column}' not found in DataFrame")
 
-            # Build list of tuples for bulk insert
-            records = []
-            for _, row in df.iterrows():
-                date_val = row[date_column]
-                close_val = row.get(close_column)
+            # Filter rows without close price (vectorized)
+            df = df[df[close_column].notna()]
 
-                if pd.isna(close_val):
-                    continue  # Skip rows without close price
-
-                # Extract optional columns
-                adj_close_val = row.get(adj_close_column) if adj_close_column and adj_close_column in df.columns else None
-                open_val = row.get(open_column) if open_column and open_column in df.columns else None
-                high_val = row.get(high_column) if high_column and high_column in df.columns else None
-                low_val = row.get(low_column) if low_column and low_column in df.columns else None
-                volume_val = row.get(volume_column) if volume_column and volume_column in df.columns else None
-
-                # Convert NaN to None for SQL
-                adj_close_val = None if pd.isna(adj_close_val) else float(adj_close_val)
-                open_val = None if pd.isna(open_val) else float(open_val)
-                high_val = None if pd.isna(high_val) else float(high_val)
-                low_val = None if pd.isna(low_val) else float(low_val)
-                volume_val = None if pd.isna(volume_val) else float(volume_val)
-
-                records.append((
-                    risk_factor_id,
-                    date_val,
-                    open_val,
-                    high_val,
-                    low_val,
-                    float(close_val),
-                    adj_close_val,
-                    volume_val
-                ))
-
-            if not records:
+            if df.empty:
                 raise ValidationError("No valid records to insert (all close prices are NaN)")
+
+            # Extract column values, converting NaN to None for SQL
+            def _col_values(col_param):
+                if col_param and col_param in df.columns:
+                    return [None if pd.isna(v) else float(v) for v in df[col_param].values]
+                return [None] * len(df)
+
+            # Build records using vectorized column access
+            records = list(zip(
+                [risk_factor_id] * len(df),
+                df[date_column].values,
+                _col_values(open_column),
+                _col_values(high_column),
+                _col_values(low_column),
+                [float(v) for v in df[close_column].values],
+                _col_values(adj_close_column),
+                _col_values(volume_column),
+            ))
 
             # Bulk insert using executemany
             cursor = self.conn.cursor()

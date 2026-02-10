@@ -267,9 +267,9 @@ class EquityLoader:
         # Limit symbols if requested
         symbols_to_load = symbols[:max_symbols] if max_symbols else symbols
 
-        print(f"Loading {len(symbols_to_load)} symbols (delay: {self.delay_seconds}s, batch size: {self.batch_size})")
+        logger.info(f"Loading {len(symbols_to_load)} symbols (delay: {self.delay_seconds}s, batch size: {self.batch_size})")
         if max_symbols and len(symbols) > max_symbols:
-            print(f"  (Limited from {len(symbols)} total symbols)")
+            logger.info(f"  (Limited from {len(symbols)} total symbols)")
 
         total_records = 0
         start_time = time.time()
@@ -291,10 +291,10 @@ class EquityLoader:
                 rate = i / elapsed if elapsed > 0 else 0
                 remaining = len(symbols_to_load) - i
                 eta = remaining / rate if rate > 0 else 0
-                print(f"  Progress: {i}/{len(symbols_to_load)} ({i/len(symbols_to_load)*100:.1f}%) - ETA: {eta/60:.1f} min")
+                logger.info(f"  Progress: {i}/{len(symbols_to_load)} ({i/len(symbols_to_load)*100:.1f}%) - ETA: {eta/60:.1f} min")
 
         elapsed = time.time() - start_time
-        print(f"\n✓ Total: {total_records} records loaded for {len(symbols_to_load)} symbols in {elapsed/60:.1f} minutes")
+        logger.info(f"Total: {total_records} records loaded for {len(symbols_to_load)} symbols in {elapsed/60:.1f} minutes")
         return total_records
 
     def load_from_group(
@@ -324,10 +324,10 @@ class EquityLoader:
         # Limit if requested
         risk_factors_to_load = group.config['risk_factors'][:max_symbols] if max_symbols else group.config['risk_factors']
 
-        print(f"Loading group: {metadata['group_name']} ({len(risk_factors_to_load)} risk factors)")
-        print(f"  Rate limiting: {self.delay_seconds}s delay, pause every {self.batch_size} symbols")
+        logger.info(f"Loading group: {metadata['group_name']} ({len(risk_factors_to_load)} risk factors)")
+        logger.info(f"  Rate limiting: {self.delay_seconds}s delay, pause every {self.batch_size} symbols")
         if max_symbols and total_count > max_symbols:
-            print(f"  (Limited from {total_count} total risk factors)")
+            logger.info(f"  (Limited from {total_count} total risk factors)")
 
         total_records = 0
         start_time = time.time()
@@ -353,8 +353,8 @@ class EquityLoader:
                 rate = i / elapsed if elapsed > 0 else 0
                 remaining = len(risk_factors_to_load) - i
                 eta = remaining / rate if rate > 0 else 0
-                print(f"  Progress: {i}/{len(risk_factors_to_load)} ({i/len(risk_factors_to_load)*100:.1f}%) - ETA: {eta/60:.1f} min")
+                logger.info(f"  Progress: {i}/{len(risk_factors_to_load)} ({i/len(risk_factors_to_load)*100:.1f}%) - ETA: {eta/60:.1f} min")
 
         elapsed = time.time() - start_time
-        print(f"\n✓ Group '{metadata['group_name']}': {total_records} records loaded in {elapsed/60:.1f} minutes")
+        logger.info(f"Group '{metadata['group_name']}': {total_records} records loaded in {elapsed/60:.1f} minutes")
         return total_records
