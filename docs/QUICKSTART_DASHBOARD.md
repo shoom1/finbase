@@ -4,7 +4,7 @@
 
 ### Step 1: Setup (First Time Only)
 
-**Note:** Database is stored in `~/.findata/timeseries.db` by default. Configuration is saved to `~/.findatarc`.
+**Note:** Database is stored in `~/.finbase/timeseries.db` by default. Configuration is saved to `~/.finbaserc`.
 
 ```bash
 # Option A: Automated setup with demo data

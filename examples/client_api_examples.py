@@ -1,12 +1,12 @@
 """
-Examples of using the FinData DataClient API.
+Examples of using the FinBase DataClient API.
 
-This demonstrates how external projects can access FinData without direct database access.
+This demonstrates how external projects can access FinBase without direct database access.
 """
 
-from findata.client import DataClient
+from finbase.client import DataClient
 
-# Initialize client (auto-finds database via ~/.findatarc)
+# Initialize client (auto-finds database via ~/.finbaserc)
 client = DataClient()
 
 # ============================================================================
@@ -218,7 +218,7 @@ print("=" * 70)
 
 # Simulate how tsgen would use this API
 print("\n# In tsgen project:")
-print("from findata import DataClient")
+print("from finbase import DataClient")
 print()
 print("client = DataClient()")
 print()

@@ -58,13 +58,13 @@ This gives you: daily OHLCV data in the `timeseries_data` table.
 python scripts/setup_database.py --list-indices
 
 # Or via Python
-python -c "from findata import DataClient; c = DataClient(); print(c.get_stats())"
+python -c "from finbase import DataClient; c = DataClient(); print(c.get_stats())"
 ```
 
 ## Use the Data
 
 ```python
-from findata import DataClient
+from finbase import DataClient
 
 client = DataClient()
 

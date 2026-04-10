@@ -1,5 +1,5 @@
 """
-Tests for user configuration management (~/.findatarc).
+Tests for user configuration management (~/.finbaserc).
 """
 
 import pytest
@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from findata.config.user_config import (
+from finbase.config.user_config import (
     UserConfig,
     initialize_user_space,
     get_configured_db_path,
@@ -31,7 +31,7 @@ def temp_config_dir(tmp_path):
 @pytest.fixture
 def temp_config_file(temp_config_dir):
     """Create temporary config file path."""
-    return temp_config_dir / ".findatarc"
+    return temp_config_dir / ".finbaserc"
 
 
 @pytest.fixture
@@ -189,12 +189,12 @@ class TestInitializeUserSpace:
     def test_initialize_default_path(self, tmp_path):
         """Test initializing with default path."""
         # Use explicit path instead of trying to mock Path.home()
-        user_space = tmp_path / ".findata"
+        user_space = tmp_path / ".finbase"
         db_path = user_space / "timeseries.db"
-        config_path = tmp_path / ".findatarc"
+        config_path = tmp_path / ".finbaserc"
 
         # Mock config path
-        from findata.config import user_config as uc_module
+        from finbase.config import user_config as uc_module
         original_config_path = uc_module.DEFAULT_CONFIG_PATH
         uc_module.DEFAULT_CONFIG_PATH = config_path
 
@@ -220,7 +220,7 @@ class TestInitializeUserSpace:
         custom_db_path = tmp_path / "custom" / "location" / "db.db"
 
         # Mock config path
-        from findata.config import user_config as uc_module
+        from finbase.config import user_config as uc_module
         original_default = uc_module.DEFAULT_CONFIG_PATH
         uc_module.DEFAULT_CONFIG_PATH = temp_config_file
 
@@ -245,7 +245,7 @@ class TestInitializeUserSpace:
         deep_path = tmp_path / "level1" / "level2" / "level3" / "db.db"
 
         # Mock config path
-        from findata.config import user_config as uc_module
+        from finbase.config import user_config as uc_module
         original_default = uc_module.DEFAULT_CONFIG_PATH
         uc_module.DEFAULT_CONFIG_PATH = temp_config_file
 
@@ -268,7 +268,7 @@ class TestGetConfiguredDbPath:
         config.set_db_path(test_path)
 
         # Mock DEFAULT_CONFIG_PATH
-        from findata.config import user_config as uc_module
+        from finbase.config import user_config as uc_module
         original_default = uc_module.DEFAULT_CONFIG_PATH
         uc_module.DEFAULT_CONFIG_PATH = temp_config_file
 
@@ -284,13 +284,13 @@ class TestGetConfiguredDbPath:
         nonexistent_config = tmp_path / "nonexistent.yaml"
 
         # Mock DEFAULT_CONFIG_PATH and DEFAULT_DB_PATH
-        from findata.config import user_config as uc_module
+        from finbase.config import user_config as uc_module
         original_config_path = uc_module.DEFAULT_CONFIG_PATH
         original_db_path = uc_module.DEFAULT_DB_PATH
 
         temp_home = tmp_path / "home"
         temp_home.mkdir()
-        expected_path = temp_home / ".findata" / "timeseries.db"
+        expected_path = temp_home / ".finbase" / "timeseries.db"
 
         uc_module.DEFAULT_CONFIG_PATH = nonexistent_config
         uc_module.DEFAULT_DB_PATH = expected_path
@@ -347,7 +347,7 @@ class TestErrorHandling:
         # Create read-only directory
         readonly_dir = tmp_path / "readonly"
         readonly_dir.mkdir()
-        config_file = readonly_dir / ".findatarc"
+        config_file = readonly_dir / ".finbaserc"
 
         config = UserConfig(config_path=config_file)
 

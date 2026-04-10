@@ -1,5 +1,5 @@
 """
-Centralized configuration management for FinData.
+Centralized configuration management for FinBase.
 
 This module provides configuration settings for:
 - Database paths and connection parameters
@@ -9,8 +9,8 @@ This module provides configuration settings for:
 
 Configuration priority (highest to lowest):
 1. Explicit parameters (e.g., CLI arguments)
-2. User config file (~/.findatarc)
-3. Environment variables (FINDATA_*)
+2. User config file (~/.finbaserc)
+3. Environment variables (FINBASE_*)
 4. Default values
 """
 
@@ -25,19 +25,19 @@ def _get_default_db_path() -> str:
     Get the default database path from user config or fallback.
 
     Priority:
-    1. User config file (~/.findatarc)
-    2. Fallback to ~/.findata/timeseries.db
+    1. User config file (~/.finbaserc)
+    2. Fallback to ~/.finbase/timeseries.db
 
     Returns:
         Database path as string
     """
     try:
-        from findata.config.user_config import get_configured_db_path
+        from finbase.config.user_config import get_configured_db_path
         db_path = get_configured_db_path()
         return str(db_path)
     except Exception:
         # Fallback if user_config module fails
-        return str(Path.home() / ".findata" / "timeseries.db")
+        return str(Path.home() / ".finbase" / "timeseries.db")
 
 
 @dataclass
@@ -121,7 +121,7 @@ class Settings:
     validation: ValidationConfig = field(default_factory=ValidationConfig)
 
     # Environment
-    environment: str = field(default_factory=lambda: os.getenv('FINDATA_ENV', 'development'))
+    environment: str = field(default_factory=lambda: os.getenv('FINBASE_ENV', 'development'))
 
     @classmethod
     def load_from_env(cls) -> 'Settings':
@@ -130,17 +130,17 @@ class Settings:
 
         Configuration priority:
         1. Environment variables (if set)
-        2. User config file (~/.findatarc)
+        2. User config file (~/.finbaserc)
         3. Default values
 
         Environment variables:
-            FINDATA_ENV: Environment name (development, production, test)
-            FINDATA_DB_PATH: Database file path (overrides user config)
-            FINDATA_LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
-            FINDATA_LOG_DIR: Log directory
-            FINDATA_YFINANCE_DELAY: Delay between YFinance requests (seconds)
-            FINDATA_YFINANCE_BATCH_SIZE: Batch size for YFinance requests
-            FINDATA_YFINANCE_BATCH_PAUSE: Pause after each batch (seconds)
+            FINBASE_ENV: Environment name (development, production, test)
+            FINBASE_DB_PATH: Database file path (overrides user config)
+            FINBASE_LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
+            FINBASE_LOG_DIR: Log directory
+            FINBASE_YFINANCE_DELAY: Delay between YFinance requests (seconds)
+            FINBASE_YFINANCE_BATCH_SIZE: Batch size for YFinance requests
+            FINBASE_YFINANCE_BATCH_PAUSE: Pause after each batch (seconds)
 
         Returns:
             Settings instance configured from environment
@@ -148,27 +148,27 @@ class Settings:
         settings = cls()
 
         # Database settings
-        if db_path := os.getenv('FINDATA_DB_PATH'):
+        if db_path := os.getenv('FINBASE_DB_PATH'):
             settings.database.path = db_path
 
-        if db_timeout := os.getenv('FINDATA_DB_TIMEOUT'):
+        if db_timeout := os.getenv('FINBASE_DB_TIMEOUT'):
             settings.database.timeout = float(db_timeout)
 
         # Logging settings
-        if log_level := os.getenv('FINDATA_LOG_LEVEL'):
+        if log_level := os.getenv('FINBASE_LOG_LEVEL'):
             settings.logging.log_level = log_level.upper()
 
-        if log_dir := os.getenv('FINDATA_LOG_DIR'):
+        if log_dir := os.getenv('FINBASE_LOG_DIR'):
             settings.logging.log_dir = log_dir
 
         # Rate limiting settings
-        if yf_delay := os.getenv('FINDATA_YFINANCE_DELAY'):
+        if yf_delay := os.getenv('FINBASE_YFINANCE_DELAY'):
             settings.rate_limit.yfinance_delay_seconds = float(yf_delay)
 
-        if yf_batch_size := os.getenv('FINDATA_YFINANCE_BATCH_SIZE'):
+        if yf_batch_size := os.getenv('FINBASE_YFINANCE_BATCH_SIZE'):
             settings.rate_limit.yfinance_batch_size = int(yf_batch_size)
 
-        if yf_batch_pause := os.getenv('FINDATA_YFINANCE_BATCH_PAUSE'):
+        if yf_batch_pause := os.getenv('FINBASE_YFINANCE_BATCH_PAUSE'):
             settings.rate_limit.yfinance_batch_pause = float(yf_batch_pause)
 
         return settings

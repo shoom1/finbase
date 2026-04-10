@@ -43,7 +43,7 @@ env/
 *.db-journal
 
 # User config (contains local paths)
-.findatarc
+.finbaserc
 
 # Testing
 .pytest_cache/

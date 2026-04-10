@@ -58,7 +58,7 @@ class SP500WikipediaParser:
 
             # Set User-Agent to avoid 403 errors from Wikipedia
             headers = {
-                'User-Agent': 'FinData/0.1.0 (Financial Data Management; Educational/Research Use)'
+                'User-Agent': 'FinBase/0.1.0 (Financial Data Management; Educational/Research Use)'
             }
 
             response = requests.get(self.url, headers=headers, timeout=30)

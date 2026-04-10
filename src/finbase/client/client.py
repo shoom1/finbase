@@ -1,5 +1,5 @@
 """
-DataClient - Client API for accessing FinData database.
+DataClient - Client API for accessing FinBase database.
 
 Provides simple, intuitive interface for querying financial data.
 """
@@ -8,7 +8,7 @@ import pandas as pd
 from typing import List, Optional, Union, Dict, Tuple
 from datetime import datetime, timedelta
 
-from ..data.database import TimeSeriesDB
+from ..data.database import TimeSeriesDB, DatabaseError
 from ..data.database.index_db import IndexDB
 from ..config import get_settings
 from ..utils.logging import get_logger
@@ -18,14 +18,14 @@ logger = get_logger(__name__)
 
 class DataClient:
     """
-    Client for querying financial data from FinData database.
+    Client for querying financial data from FinBase database.
 
     Provides high-level API for data discovery and retrieval without
     requiring direct database knowledge.
 
     Example:
         ```python
-        from findata import DataClient
+        from finbase import DataClient
 
         client = DataClient()
 
@@ -56,7 +56,7 @@ class DataClient:
 
         Args:
             db_path: Optional database path. If None, uses path from settings
-                     (which reads from ~/.findatarc)
+                     (which reads from ~/.finbaserc)
         """
         self.db_path = db_path or get_settings().database.path
         logger.debug(f"DataClient initialized with database: {self.db_path}")
@@ -128,38 +128,37 @@ class DataClient:
         if invalid:
             raise ValueError(f"Invalid columns: {invalid}. Valid: {valid_columns}")
 
-        # Query each symbol and column combination
+        # Early return for empty symbols
+        if not symbols:
+            return pd.DataFrame(columns=['date', 'symbol', 'data_source', 'metric', 'value'])
+
+        # Query all symbols at once per column (avoids N+1 query pattern)
         all_data = []
 
         with self._get_db() as db:
-            for symbol in symbols:
-                for column in columns:
-                    try:
-                        # Query single symbol, single column
-                        df = db.query(
-                            symbols=[symbol],
-                            start_date=start,
-                            end_date=end,
-                            column=column,
-                            data_source=data_source
-                        )
+            for column in columns:
+                try:
+                    df = db.query(
+                        symbols=symbols,
+                        start_date=start,
+                        end_date=end,
+                        column=column,
+                        data_source=data_source
+                    )
+                except DatabaseError:
+                    # No data found for these symbols/date range
+                    continue
 
-                        if not df.empty:
-                            # Convert to long format
-                            df_long = df.reset_index()
-                            df_long = df_long.melt(
-                                id_vars=['date'],
-                                var_name='symbol',
-                                value_name='value'
-                            )
-                            df_long['data_source'] = data_source
-                            df_long['metric'] = column
-
-                            all_data.append(df_long)
-
-                    except Exception as e:
-                        logger.warning(f"Error querying {symbol} {column}: {e}")
-                        continue
+                if not df.empty:
+                    df_long = df.reset_index()
+                    df_long = df_long.melt(
+                        id_vars=['date'],
+                        var_name='symbol',
+                        value_name='value'
+                    )
+                    df_long['data_source'] = data_source
+                    df_long['metric'] = column
+                    all_data.append(df_long)
 
         # Combine all data
         if not all_data:

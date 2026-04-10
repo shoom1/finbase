@@ -44,8 +44,8 @@ class TimeSeriesDB:
 
         Args:
             db_path: Path to SQLite database file. If None, uses path from
-                     Settings (which reads from ~/.findatarc or defaults to
-                     ~/.findata/timeseries.db)
+                     Settings (which reads from ~/.finbaserc or defaults to
+                     ~/.finbase/timeseries.db)
 
         Raises:
             DatabaseError: If connection cannot be established

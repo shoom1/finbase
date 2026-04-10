@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-from findata.data.database.timeseries_db import (
+from finbase.data.database.timeseries_db import (
     TimeSeriesDB,
     DatabaseError,
     ValidationError

@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from findata.data.database import TimeSeriesDB
+from finbase.data.database import TimeSeriesDB
 
 
 @pytest.fixture

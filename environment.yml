@@ -1,4 +1,4 @@
-name: findata
+name: finbase
 channels:
   - conda-forge
   - defaults

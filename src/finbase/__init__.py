@@ -1,5 +1,5 @@
 """
-FinData - Financial data management and access package.
+FinBase - Financial data management and access package.
 
 Main exports:
 - DataClient: High-level API for querying financial data
