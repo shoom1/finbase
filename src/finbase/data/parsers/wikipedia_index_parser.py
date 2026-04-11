@@ -64,22 +64,25 @@ class WikipediaIndexParser:
         Raises:
             WikipediaIndexParserError: If config file not found
         """
-        # Find config file
-        config_path = Path(__file__).parent.parent.parent.parent / "data" / "index_configs" / f"{index_code.lower()}.json"
+        from importlib.resources import files
 
-        if not config_path.exists():
+        config_dir = files("finbase.index_configs")
+        config_file = config_dir / f"{index_code.lower()}.json"
+
+        try:
+            config_text = config_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
             raise WikipediaIndexParserError(
-                f"Config file not found for {index_code} at {config_path}. "
-                f"Available configs should be in data/index_configs/"
+                f"Config file not found for {index_code}. "
+                f"Expected: {index_code.lower()}.json in finbase/index_configs/"
             )
 
         try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            logger.info(f"Loaded config for {index_code} from {config_path}")
+            config = json.loads(config_text)
+            logger.info(f"Loaded config for {index_code}")
             return cls(config)
         except json.JSONDecodeError as e:
-            raise WikipediaIndexParserError(f"Invalid JSON in config file {config_path}: {e}")
+            raise WikipediaIndexParserError(f"Invalid JSON in config for {index_code}: {e}")
 
     @classmethod
     def from_config_file(cls, config_path: str):

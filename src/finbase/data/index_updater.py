@@ -162,28 +162,31 @@ class IndexUpdater:
         Returns:
             Dict mapping index_code to summary dict
         """
-        from pathlib import Path
         import json
+        from importlib.resources import files
 
-        # Find all config files
-        config_dir = Path(__file__).parent.parent.parent / "data" / "index_configs"
-        config_files = list(config_dir.glob("*.json"))
+        config_dir = files("finbase.index_configs")
 
-        if not config_files:
-            logger.warning(f"No index config files found in {config_dir}")
+        # List all JSON config files in the package
+        config_entries = [
+            entry for entry in config_dir.iterdir()
+            if entry.name.endswith(".json")
+        ]
+
+        if not config_entries:
+            logger.warning("No index config files found in finbase.index_configs")
             return {}
 
-        logger.info(f"Found {len(config_files)} index configs to update")
+        logger.info(f"Found {len(config_entries)} index configs to update")
 
         results = {}
-        for config_file in config_files:
+        for config_entry in config_entries:
             try:
-                with open(config_file, 'r') as f:
-                    config = json.load(f)
+                config = json.loads(config_entry.read_text(encoding="utf-8"))
                 index_code = config.get('index_code')
 
                 if not index_code:
-                    logger.warning(f"No index_code in config {config_file}, skipping")
+                    logger.warning(f"No index_code in config {config_entry.name}, skipping")
                     continue
 
                 logger.info(f"Updating {index_code}...")
@@ -191,8 +194,9 @@ class IndexUpdater:
                 results[index_code] = summary
 
             except Exception as e:
-                logger.error(f"Failed to update {config_file.stem}: {e}")
-                results[config_file.stem] = {
+                stem = config_entry.name.removesuffix(".json")
+                logger.error(f"Failed to update {stem}: {e}")
+                results[stem] = {
                     'error': str(e),
                     'status': 'failed'
                 }
