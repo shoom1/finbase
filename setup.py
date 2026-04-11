@@ -1,7 +1,7 @@
 """
-Setup script for findata package.
+Setup script for finbase package.
 
-This allows findata to be installed as a Python package for use by other projects.
+This allows finbase to be installed as a Python package for use by other projects.
 """
 
 from setuptools import setup, find_packages
@@ -12,13 +12,13 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 setup(
-    name="findata",
-    version="0.1.0",
+    name="finbase",
+    version="0.1.1",
     description="Historical financial data management system with support for equities, indices, and multi-asset data",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="FinData Contributors",
-    url="https://github.com/yourusername/findata",  # Update with actual GitHub URL
+    author="FinBase Contributors",
+    url="https://github.com/yourusername/finbase",  # Update with actual GitHub URL
     license="MIT",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
@@ -56,8 +56,8 @@ setup(
     ],
     keywords="finance, data, timeseries, equity, index, historical-data",
     project_urls={
-        "Bug Reports": "https://github.com/yourusername/findata/issues",
-        "Source": "https://github.com/yourusername/findata",
-        "Documentation": "https://github.com/yourusername/findata/blob/main/CLAUDE.md",
+        "Bug Reports": "https://github.com/yourusername/finbase/issues",
+        "Source": "https://github.com/yourusername/finbase",
+        "Documentation": "https://github.com/yourusername/finbase/blob/main/CLAUDE.md",
     },
 )

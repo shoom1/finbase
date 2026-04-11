@@ -5,9 +5,9 @@ This example shows how to download historical price data for all stocks
 in a specific index (SP500, DOW30, NDX, FTSE100, DAX).
 """
 
-from findata.data.database import TimeSeriesDB
-from findata.data.database.index_db import IndexDB
-from findata.data.loaders import EquityLoader
+from finbase.data.database import TimeSeriesDB
+from finbase.data.database.index_db import IndexDB
+from finbase.data.loaders import EquityLoader
 
 def load_dow30_example():
     """Load historical data for all DOW30 constituents."""

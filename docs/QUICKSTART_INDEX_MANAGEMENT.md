@@ -23,7 +23,7 @@ python scripts/setup_database.py --list-indices
 ### Get Current Constituents
 
 ```python
-from findata import DataClient
+from finbase import DataClient
 
 client = DataClient()
 

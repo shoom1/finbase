@@ -1,4 +1,4 @@
-# FinData Dashboard
+# FinBase Dashboard
 
 **Interactive web dashboard for visualizing financial data availability and quality.**
 
@@ -7,7 +7,7 @@
 
 ## Overview
 
-The FinData Dashboard provides real-time visualization of your financial data database, focusing on data availability, freshness, and distribution across asset classes, sectors, and geographies.
+The FinBase Dashboard provides real-time visualization of your financial data database, focusing on data availability, freshness, and distribution across asset classes, sectors, and geographies.
 
 ### Key Features
 
@@ -26,8 +26,8 @@ The FinData Dashboard provides real-time visualization of your financial data da
 ### 1. Install Dependencies
 
 ```bash
-# Activate findata environment
-conda activate findata
+# Activate finbase environment
+conda activate finbase
 
 # Dependencies already installed via environment.yml:
 # - streamlit>=1.28.0
@@ -179,22 +179,22 @@ All charts are interactive:
 
 ### Database Path
 
-The database is stored in user space (`~/.findata/timeseries.db` by default) and configuration is saved to `~/.findatarc` (YAML format).
+The database is stored in user space (`~/.finbase/timeseries.db` by default) and configuration is saved to `~/.finbaserc` (YAML format).
 
 **Configuration priority:**
 1. Explicit path in code
-2. User config file (`~/.findatarc`)
-3. Environment variable (`FINDATA_DB_PATH`)
-4. Default (`~/.findata/timeseries.db`)
+2. User config file (`~/.finbaserc`)
+3. Environment variable (`FINBASE_DB_PATH`)
+4. Default (`~/.finbase/timeseries.db`)
 
 **View current database path:**
 ```bash
-cat ~/.findatarc
+cat ~/.finbaserc
 ```
 
 **Override with environment variable:**
 ```bash
-export FINDATA_DB_PATH=/path/to/custom.db
+export FINBASE_DB_PATH=/path/to/custom.db
 streamlit run dashboard_app.py
 ```
 

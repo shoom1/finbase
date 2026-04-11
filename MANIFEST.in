@@ -23,8 +23,8 @@ global-exclude .DS_Store
 
 # Exclude build artifacts
 global-exclude *.egg-info
-exclude findata.egg-info
-exclude src/findata.egg-info
+exclude finbase.egg-info
+exclude src/finbase.egg-info
 
 # Exclude database and cache files
 exclude data/timeseries.db

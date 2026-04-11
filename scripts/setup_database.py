@@ -1,8 +1,8 @@
 """
 Setup script to initialize time series database and load initial data.
 
-The database is stored in user space (~/.findata/timeseries.db by default)
-and configuration is saved to ~/.findatarc for cross-project access.
+The database is stored in user space (~/.finbase/timeseries.db by default)
+and configuration is saved to ~/.finbaserc for cross-project access.
 
 Usage:
     python scripts/setup_database.py --init                         # Initialize in default location
@@ -19,14 +19,14 @@ import argparse
 from datetime import datetime
 from typing import Optional
 
-from findata.data.database import TimeSeriesDB
-from findata.data.database.index_db import IndexDB
-from findata.data.loaders import EquityLoader
-from findata.data.risk_factor_groups import RiskFactorGroup, EquityRiskFactorGroup
-from findata.data.index_updater import IndexUpdater
-from findata.config.user_config import initialize_user_space
-from findata.config import get_settings
-from findata.utils.logging import get_logger
+from finbase.data.database import TimeSeriesDB
+from finbase.data.database.index_db import IndexDB
+from finbase.data.loaders import EquityLoader
+from finbase.data.risk_factor_groups import RiskFactorGroup, EquityRiskFactorGroup
+from finbase.data.index_updater import IndexUpdater
+from finbase.config.user_config import initialize_user_space
+from finbase.config import get_settings
+from finbase.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ def initialize_database(db_path: str = None):
 
     Args:
         db_path: Optional database path. If None, uses default from Settings.
-                 Custom paths are saved to ~/.findatarc for future use.
+                 Custom paths are saved to ~/.finbaserc for future use.
 
     Returns:
         TimeSeriesDB instance
@@ -60,7 +60,7 @@ def initialize_database(db_path: str = None):
     # Initialize user space and save config
     actual_db_path = initialize_user_space(Path(db_path))
     print(f"User space initialized: {actual_db_path.parent}")
-    print(f"Configuration saved to: ~/.findatarc")
+    print(f"Configuration saved to: ~/.finbaserc")
 
     # Initialize database schema
     db = TimeSeriesDB(str(actual_db_path))
@@ -235,8 +235,8 @@ def load_index_constituents(
         # Load first 10 SP500 constituents
         load_index_constituents(db, 'SP500', max_symbols=10)
     """
-    from findata.data.database.index_db import IndexDB
-    from findata.data.loaders.equity_loader import EquityLoader
+    from finbase.data.database.index_db import IndexDB
+    from finbase.data.loaders.equity_loader import EquityLoader
 
     print("\n" + "=" * 60)
     print(f"Loading {index_code} Constituent Data")
@@ -428,7 +428,7 @@ def list_indices(db: TimeSeriesDB):
             try:
                 constituents_df = index_db.get_current_constituents(row['index_code'])
                 print(f"    Current constituents: {len(constituents_df)}")
-            except:
+            except Exception:
                 print(f"    Current constituents: 0")
             print()
 
@@ -448,7 +448,7 @@ def main():
     parser.add_argument("--max-symbols", type=int, default=10, help="Max symbols to load per run (default: 10)")
     parser.add_argument("--full", action="store_true", help="Full setup (init + sp500 + top 10 + indices)")
     parser.add_argument("--start-date", type=str, default="2005-01-01", help="Start date for data loading (default: 2005-01-01)")
-    parser.add_argument("--db-path", type=str, default=None, help="Database path (default: ~/.findata/timeseries.db or from ~/.findatarc)")
+    parser.add_argument("--db-path", type=str, default=None, help="Database path (default: ~/.finbase/timeseries.db or from ~/.finbaserc)")
     parser.add_argument("--force-reload", action="store_true", help="Force reload data even if symbols already exist (default: skip existing)")
 
     # Index management arguments
@@ -471,83 +471,86 @@ def main():
 
     db = None
 
-    # Full setup
-    if args.full:
-        db = initialize_database(args.db_path)
-        setup_sp500_group()
-        print("\nℹ️  Skipping market cap update (run --update-market-caps separately, takes 10-15 min)")
-        create_sectors()
-        load_indices(db, args.start_date)
-        print("\nℹ️  To load S&P 500 stocks, first run:")
-        print("    python scripts/setup_database.py --update-market-caps")
-        print("    python scripts/setup_database.py --load-sp500-top 100")
-        return
+    try:
+        # Full setup
+        if args.full:
+            db = initialize_database(args.db_path)
+            setup_sp500_group()
+            print("\nℹ️  Skipping market cap update (run --update-market-caps separately, takes 10-15 min)")
+            create_sector_subsets()
+            load_indices(db, args.start_date)
+            print("\nℹ️  To load S&P 500 stocks, first run:")
+            print("    python scripts/setup_database.py --update-market-caps")
+            print("    python scripts/setup_database.py --load-sp500-top 100")
+            return
 
-    # Individual steps
-    if args.init:
-        db = initialize_database(args.db_path)
+        # Individual steps
+        if args.init:
+            db = initialize_database(args.db_path)
 
-    if args.setup_sp500:
-        setup_sp500_group()
+        if args.setup_sp500:
+            setup_sp500_group()
 
-    if args.update_market_caps:
-        update_sp500_market_caps()
+        if args.update_market_caps:
+            update_sp500_market_caps()
 
-    if args.create_sectors:
-        create_sector_subsets()
+        if args.create_sectors:
+            create_sector_subsets()
 
-    if args.load_indices:
-        if db is None:
-            # Get db path from settings if not provided
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        load_indices(db, args.start_date, max_symbols=args.max_symbols, skip_existing=skip_existing)
+        if args.load_indices:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            load_indices(db, args.start_date, max_symbols=args.max_symbols, skip_existing=skip_existing)
 
-    if args.load_sp500_top:
-        if db is None:
-            # Get db path from settings if not provided
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        n = min(args.load_sp500_top, args.max_symbols)  # Respect max_symbols limit
-        if args.load_sp500_top > args.max_symbols:
-            print(f"⚠️  Requested {args.load_sp500_top} but limiting to {args.max_symbols} (use --max-symbols to override)")
-        load_sp500_top_n(db, n, args.start_date, skip_existing=skip_existing)
+        if args.load_sp500_top:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            n = min(args.load_sp500_top, args.max_symbols)  # Respect max_symbols limit
+            if args.load_sp500_top > args.max_symbols:
+                print(f"⚠️  Requested {args.load_sp500_top} but limiting to {args.max_symbols} (use --max-symbols to override)")
+            load_sp500_top_n(db, n, args.start_date, skip_existing=skip_existing)
 
-    # Index management operations
-    if args.update_index:
-        if db is None:
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        for index_code in args.update_index:
-            update_index_constituents(db, index_code.upper())
+        # Index management operations
+        if args.update_index:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            for index_code in args.update_index:
+                update_index_constituents(db, index_code.upper())
 
-    if args.update_all_indices:
-        if db is None:
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        update_all_indices(db)
+        if args.update_all_indices:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            update_all_indices(db)
 
-    if args.list_indices:
-        if db is None:
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        list_indices(db)
+        if args.list_indices:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            list_indices(db)
 
-    if args.load_index_data:
-        if db is None:
-            db_path = args.db_path or get_settings().database.path
-            db = TimeSeriesDB(db_path)
-        load_index_constituents(
-            db,
-            args.load_index_data.upper(),
-            start_date=args.index_start_date,
-            max_symbols=args.index_max_symbols,
-            skip_existing=skip_existing
-        )
+        if args.load_index_data:
+            if db is None:
+                db_path = args.db_path or get_settings().database.path
+                db = TimeSeriesDB(db_path)
+            load_index_constituents(
+                db,
+                args.load_index_data.upper(),
+                start_date=args.index_start_date,
+                max_symbols=args.index_max_symbols,
+                skip_existing=skip_existing
+            )
 
-    print("\n" + "=" * 60)
-    print("✓ Setup Complete!")
-    print("=" * 60)
+        print("\n" + "=" * 60)
+        print("✓ Setup Complete!")
+        print("=" * 60)
+
+    finally:
+        if db is not None:
+            db.close()
 
 
 if __name__ == "__main__":

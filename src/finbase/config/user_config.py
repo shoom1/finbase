@@ -1,32 +1,32 @@
 """
-User configuration management for FinData.
+User configuration management for FinBase.
 
-Manages persistent user configuration stored in ~/.findatarc (YAML format).
+Manages persistent user configuration stored in ~/.finbaserc (YAML format).
 Handles database path configuration and user space directory setup.
 """
 
 import yaml
 from pathlib import Path
 from typing import Optional, Dict, Any
-from findata.utils.logging import get_logger
+from finbase.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 # Default paths
-DEFAULT_CONFIG_PATH = Path.home() / ".findatarc"
-DEFAULT_USER_SPACE = Path.home() / ".findata"
+DEFAULT_CONFIG_PATH = Path.home() / ".finbaserc"
+DEFAULT_USER_SPACE = Path.home() / ".finbase"
 DEFAULT_DB_PATH = DEFAULT_USER_SPACE / "timeseries.db"
 
 
 class UserConfig:
-    """Manages user configuration in ~/.findatarc (YAML format)."""
+    """Manages user configuration in ~/.finbaserc (YAML format)."""
 
     def __init__(self, config_path: Optional[Path] = None):
         """
         Initialize user configuration.
 
         Args:
-            config_path: Path to config file (defaults to ~/.findatarc)
+            config_path: Path to config file (defaults to ~/.finbaserc)
         """
         self.config_path = config_path or DEFAULT_CONFIG_PATH
         self._config = self._load()
@@ -160,11 +160,11 @@ def initialize_user_space(db_path: Optional[Path] = None) -> Path:
     """
     Initialize user space directory structure.
 
-    Creates ~/.findata/ directory and sets up default database location.
-    Saves configuration to ~/.findatarc.
+    Creates ~/.finbase/ directory and sets up default database location.
+    Saves configuration to ~/.finbaserc.
 
     Args:
-        db_path: Optional custom database path. If None, uses ~/.findata/timeseries.db
+        db_path: Optional custom database path. If None, uses ~/.finbase/timeseries.db
 
     Returns:
         Path to database file

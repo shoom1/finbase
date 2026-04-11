@@ -1,4 +1,4 @@
-"""Dashboard module for visualizing FinData database contents."""
+"""Dashboard module for visualizing FinBase database contents."""
 
 from .data_service import DashboardDataService
 

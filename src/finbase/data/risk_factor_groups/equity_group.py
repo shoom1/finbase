@@ -6,6 +6,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import List
 from .base_group import RiskFactorGroup
+from ...utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EquityRiskFactorGroup(RiskFactorGroup):
@@ -21,7 +24,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         """
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
-        print(f"Fetching S&P 500 constituents from Wikipedia...")
+        logger.info("Fetching S&P 500 constituents from Wikipedia...")
 
         # Fetch table
         tables = pd.read_html(url)
@@ -51,7 +54,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         # Save
         self.save()
 
-        print(f"✓ Updated S&P 500: {len(new_risk_factors)} risk factors")
+        logger.info(f"Updated S&P 500: {len(new_risk_factors)} risk factors")
         return new_risk_factors
 
     def update_market_caps(self, batch_size: int = 50):
@@ -65,7 +68,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         import yfinance as yf
 
         total = len(self.config['risk_factors'])
-        print(f"Updating market caps for {total} symbols...")
+        logger.info(f"Updating market caps for {total} symbols...")
 
         for i, rf_data in enumerate(self.config['risk_factors']):
             symbol = rf_data['symbol']
@@ -88,22 +91,22 @@ class EquityRiskFactorGroup(RiskFactorGroup):
                 rf_data['market_cap_category'] = category
 
                 if (i + 1) % 10 == 0:
-                    print(f"  Progress: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
+                    logger.info(f"  Progress: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
 
                 # Save periodically
                 if (i + 1) % batch_size == 0:
                     self.save()
-                    print(f"  Saved progress at {i+1} symbols")
+                    logger.info(f"  Saved progress at {i+1} symbols")
 
             except Exception as e:
-                print(f"  Error fetching market cap for {symbol}: {e}")
+                logger.warning(f"Error fetching market cap for {symbol}: {e}")
                 # Set default values
                 rf_data['market_cap'] = None
                 rf_data['market_cap_category'] = 'unknown'
 
         # Final save
         self.save()
-        print(f"✓ Market cap update complete")
+        logger.info("Market cap update complete")
 
     def get_top_n_by_market_cap(self, n: int = 100) -> List[str]:
         """
@@ -142,7 +145,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         ]
 
         if not sector_rfs:
-            print(f"Warning: No risk factors found for sector '{sector}'")
+            logger.warning(f"No risk factors found for sector '{sector}'")
             return
 
         sector_config = {
@@ -164,7 +167,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         with open(output_file, 'w') as f:
             json.dump(sector_config, f, indent=2)
 
-        print(f"✓ Created {sector} sector group: {len(sector_rfs)} stocks -> {output_path}")
+        logger.info(f"Created {sector} sector group: {len(sector_rfs)} stocks -> {output_path}")
 
     def create_market_cap_subset(self, category: str, output_path: str):
         """
@@ -180,7 +183,7 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         ]
 
         if not cap_rfs:
-            print(f"Warning: No risk factors found for market cap category '{category}'")
+            logger.warning(f"No risk factors found for market cap category '{category}'")
             return
 
         cap_config = {
@@ -202,4 +205,4 @@ class EquityRiskFactorGroup(RiskFactorGroup):
         with open(output_file, 'w') as f:
             json.dump(cap_config, f, indent=2)
 
-        print(f"✓ Created {category}-cap group: {len(cap_rfs)} stocks -> {output_path}")
+        logger.info(f"Created {category}-cap group: {len(cap_rfs)} stocks -> {output_path}")

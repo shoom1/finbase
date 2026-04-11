@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from findata.client.client import DataClient
+from finbase.client.client import DataClient
+from finbase.data.database import DatabaseError
 
 
 # ============================================================================
@@ -176,7 +177,7 @@ class TestInitialization:
         client = DataClient(db_path=mock_db_path)
         assert client.db_path == mock_db_path
 
-    @patch('findata.client.client.get_settings')
+    @patch('finbase.client.client.get_settings')
     def test_init_without_path(self, mock_settings):
         """Test initialization without explicit path (uses settings)."""
         mock_settings.return_value.database.path = '/default/path.db'
@@ -191,7 +192,7 @@ class TestInitialization:
 class TestGetData:
     """Test get_data() method."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_single_symbol_long_format(self, mock_db_class, client, mock_db):
         """Test getting data for single symbol in long format."""
         mock_db_class.return_value = mock_db
@@ -208,7 +209,7 @@ class TestGetData:
         assert (df['data_source'] == 'yfinance').all()
         assert len(df) == 5  # 5 days
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_multiple_symbols_long_format(self, mock_db_class, client, mock_db):
         """Test getting data for multiple symbols in long format."""
         mock_db_class.return_value = mock_db
@@ -220,7 +221,7 @@ class TestGetData:
         assert set(df['symbol'].unique()) == {'AAPL', 'MSFT'}
         assert len(df) == 6  # 3 days × 2 symbols
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_wide_format(self, mock_db_class, client, mock_db):
         """Test getting data in wide format."""
         mock_db_class.return_value = mock_db
@@ -234,7 +235,7 @@ class TestGetData:
         assert df.index.names == ['date', 'symbol']
         assert 'close' in df.columns
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_multiple_columns(self, mock_db_class, client, mock_db):
         """Test getting multiple columns."""
         mock_db_class.return_value = mock_db
@@ -246,7 +247,7 @@ class TestGetData:
         # Should have 2 metrics × 3 days = 6 rows
         assert set(df['metric'].unique()) == {'close', 'volume'}
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_all_columns_default(self, mock_db_class, client, mock_db):
         """Test getting all OHLCV columns by default."""
         mock_db_class.return_value = mock_db
@@ -257,7 +258,7 @@ class TestGetData:
         expected_metrics = {'open', 'high', 'low', 'close', 'adj_close', 'volume'}
         assert set(df['metric'].unique()) == expected_metrics
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_invalid_column(self, mock_db_class, client, mock_db):
         """Test error handling for invalid column."""
         mock_db_class.return_value = mock_db
@@ -265,7 +266,7 @@ class TestGetData:
         with pytest.raises(ValueError, match="Invalid columns"):
             client.get_data('AAPL', columns=['invalid_column'])
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_data_no_data_returns_empty(self, mock_db_class, client):
         """Test that no data returns empty DataFrame with correct schema."""
         # Mock DB that returns empty DataFrame
@@ -288,7 +289,7 @@ class TestGetData:
 class TestConvenienceMethods:
     """Test convenience methods."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_closes(self, mock_db_class, client, mock_db):
         """Test get_closes() convenience method."""
         mock_db_class.return_value = mock_db
@@ -300,7 +301,7 @@ class TestConvenienceMethods:
         assert 'MSFT' in df.columns
         assert df.index.name == 'date'
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_closes_single_symbol(self, mock_db_class, client, mock_db):
         """Test get_closes() with single symbol."""
         mock_db_class.return_value = mock_db
@@ -310,12 +311,12 @@ class TestConvenienceMethods:
         assert not df.empty
         assert 'AAPL' in df.columns
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_latest(self, mock_db_class, client, mock_db):
         """Test get_latest() method."""
         mock_db_class.return_value = mock_db
 
-        with patch('findata.client.client.datetime') as mock_datetime:
+        with patch('finbase.client.client.datetime') as mock_datetime:
             # Mock current date
             mock_datetime.now.return_value = datetime(2024, 1, 10)
             mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
@@ -326,7 +327,7 @@ class TestConvenienceMethods:
             assert (df['symbol'] == 'AAPL').all()
             assert (df['metric'] == 'close').all()
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_all(self, mock_db_class, client, mock_db):
         """Test get_all() method."""
         mock_db_class.return_value = mock_db
@@ -345,7 +346,7 @@ class TestConvenienceMethods:
 class TestDiscoveryMethods:
     """Test discovery methods."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_list_symbols_all(self, mock_db_class, client, mock_db):
         """Test listing all symbols."""
         mock_db_class.return_value = mock_db
@@ -358,7 +359,7 @@ class TestDiscoveryMethods:
         assert 'GOOGL' in symbols
         assert 'JPM' in symbols
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_list_symbols_with_filters(self, mock_db_class, client, mock_db):
         """Test listing symbols with filters."""
         mock_db_class.return_value = mock_db
@@ -371,7 +372,7 @@ class TestDiscoveryMethods:
         assert 'GOOGL' in symbols
         assert 'JPM' not in symbols  # Finance sector
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_list_symbols_empty_result(self, mock_db_class, client):
         """Test listing symbols with no matches."""
         empty_mock = MagicMock()
@@ -384,7 +385,7 @@ class TestDiscoveryMethods:
 
         assert symbols == []
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_search_symbols_with_pattern(self, mock_db_class, client, mock_db):
         """Test searching symbols with pattern."""
         mock_db_class.return_value = mock_db
@@ -395,7 +396,7 @@ class TestDiscoveryMethods:
         assert 'AAPL' in df['symbol'].values
         # Pattern matching is case-insensitive
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_search_symbols_with_filters(self, mock_db_class, client, mock_db):
         """Test searching symbols with filters and pattern."""
         mock_db_class.return_value = mock_db
@@ -413,7 +414,7 @@ class TestDiscoveryMethods:
 class TestMetadataMethods:
     """Test metadata methods."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_symbol_info_exists(self, mock_db_class, client, mock_db):
         """Test getting info for existing symbol."""
         mock_db_class.return_value = mock_db
@@ -427,7 +428,7 @@ class TestMetadataMethods:
         assert info['sector'] == 'Technology'
         assert info['data_source'] == 'yfinance'
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_symbol_info_not_exists(self, mock_db_class, client, mock_db):
         """Test getting info for non-existent symbol."""
         mock_db_class.return_value = mock_db
@@ -436,21 +437,21 @@ class TestMetadataMethods:
 
         assert info is None
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_has_symbol_true(self, mock_db_class, client, mock_db):
         """Test has_symbol() for existing symbol."""
         mock_db_class.return_value = mock_db
 
         assert client.has_symbol('AAPL') is True
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_has_symbol_false(self, mock_db_class, client, mock_db):
         """Test has_symbol() for non-existent symbol."""
         mock_db_class.return_value = mock_db
 
         assert client.has_symbol('NONEXISTENT') is False
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_date_range_exists(self, mock_db_class, client, mock_db):
         """Test getting date range for existing symbol."""
         mock_db_class.return_value = mock_db
@@ -460,7 +461,7 @@ class TestMetadataMethods:
         assert start == '2020-01-01'
         assert end == '2024-01-10'
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_date_range_not_exists(self, mock_db_class, client, mock_db):
         """Test getting date range for non-existent symbol."""
         mock_db_class.return_value = mock_db
@@ -477,7 +478,7 @@ class TestMetadataMethods:
 class TestStatisticsAndBulkMethods:
     """Test statistics and bulk retrieval methods."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_stats(self, mock_db_class, client, mock_db):
         """Test get_stats() method."""
         mock_db_class.return_value = mock_db
@@ -494,7 +495,7 @@ class TestStatisticsAndBulkMethods:
         assert 'date_range' in stats
         assert 'by_asset_class' in stats
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_stats_empty_db(self, mock_db_class, client):
         """Test get_stats() with empty database."""
         empty_mock = MagicMock()
@@ -509,7 +510,7 @@ class TestStatisticsAndBulkMethods:
         assert stats['asset_classes'] == []
         assert stats['data_sources'] == []
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_by_asset_class(self, mock_db_class, client, mock_db):
         """Test get_by_asset_class() method."""
         mock_db_class.return_value = mock_db
@@ -521,7 +522,7 @@ class TestStatisticsAndBulkMethods:
         # Only symbols with data are returned (JPM has no timeseries data in mock)
         assert set(df['symbol'].unique()) == {'AAPL', 'MSFT', 'GOOGL'}
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_by_asset_class_no_symbols(self, mock_db_class, client):
         """Test get_by_asset_class() with no matching symbols."""
         empty_mock = MagicMock()
@@ -535,7 +536,7 @@ class TestStatisticsAndBulkMethods:
         assert df.empty
         assert list(df.columns) == ['date', 'symbol', 'data_source', 'metric', 'value']
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_by_sector(self, mock_db_class, client, mock_db):
         """Test get_by_sector() method."""
         mock_db_class.return_value = mock_db
@@ -548,7 +549,7 @@ class TestStatisticsAndBulkMethods:
         assert set(df['symbol'].unique()) == {'AAPL', 'MSFT', 'GOOGL'}
         assert 'JPM' not in df['symbol'].values
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_get_by_sector_no_symbols(self, mock_db_class, client):
         """Test get_by_sector() with no matching symbols."""
         empty_mock = MagicMock()
@@ -570,30 +571,42 @@ class TestStatisticsAndBulkMethods:
 class TestErrorConditionsAndEdgeCases:
     """Test error handling and edge cases."""
 
-    @patch('findata.client.client.TimeSeriesDB')
-    def test_get_data_with_exception_handling(self, mock_db_class, client):
-        """Test that exceptions during query are handled gracefully."""
+    @patch('finbase.client.client.TimeSeriesDB')
+    def test_get_data_database_error_returns_empty(self, mock_db_class, client):
+        """Test that DatabaseError (no data found) returns empty DataFrame."""
         error_mock = MagicMock()
-        error_mock.query.side_effect = Exception("Database error")
+        error_mock.query.side_effect = DatabaseError("No risk factors found")
         error_mock.__enter__ = Mock(return_value=error_mock)
         error_mock.__exit__ = Mock(return_value=False)
         mock_db_class.return_value = error_mock
 
-        # Should log warning and continue, returning empty DataFrame
         df = client.get_data('AAPL', columns=['close'])
 
         assert df.empty
+        assert list(df.columns) == ['date', 'symbol', 'data_source', 'metric', 'value']
+
+    @patch('finbase.client.client.TimeSeriesDB')
+    def test_get_data_unexpected_error_propagates(self, mock_db_class, client):
+        """Test that unexpected exceptions propagate to the caller."""
+        error_mock = MagicMock()
+        error_mock.query.side_effect = RuntimeError("Unexpected failure")
+        error_mock.__enter__ = Mock(return_value=error_mock)
+        error_mock.__exit__ = Mock(return_value=False)
+        mock_db_class.return_value = error_mock
+
+        with pytest.raises(RuntimeError, match="Unexpected failure"):
+            client.get_data('AAPL', columns=['close'])
 
     def test_get_data_string_symbol_normalized_to_list(self, client, mock_db):
         """Test that single symbol string is normalized to list."""
-        with patch('findata.client.client.TimeSeriesDB', return_value=mock_db):
+        with patch('finbase.client.client.TimeSeriesDB', return_value=mock_db):
             df = client.get_data('AAPL', columns=['close'],
                                start='2024-01-01', end='2024-01-03')
 
             # Should work without error
             assert not df.empty
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_wide_format_conversion(self, mock_db_class, client, mock_db):
         """Test that wide format conversion works correctly."""
         mock_db_class.return_value = mock_db
@@ -608,7 +621,7 @@ class TestErrorConditionsAndEdgeCases:
         # Should not have 'metric' column name
         assert df.columns.name is None
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_data_source_parameter_passed_correctly(self, mock_db_class, client, mock_db):
         """Test that data_source parameter is passed to database queries."""
         mock_db_class.return_value = mock_db
@@ -620,7 +633,7 @@ class TestErrorConditionsAndEdgeCases:
         call_kwargs = mock_db.query.call_args[1]
         assert call_kwargs['data_source'] == 'bloomberg'
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_empty_symbol_list(self, mock_db_class, client, mock_db):
         """Test handling of empty symbol list."""
         mock_db_class.return_value = mock_db
@@ -639,7 +652,7 @@ class TestErrorConditionsAndEdgeCases:
 class TestIntegrationScenarios:
     """Test realistic usage scenarios."""
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_portfolio_analysis_workflow(self, mock_db_class, client, mock_db):
         """Test typical portfolio analysis workflow."""
         mock_db_class.return_value = mock_db
@@ -660,7 +673,7 @@ class TestIntegrationScenarios:
                                  format='wide')
         assert not df_wide.empty
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_data_discovery_workflow(self, mock_db_class, client, mock_db):
         """Test data discovery workflow."""
         mock_db_class.return_value = mock_db
@@ -683,7 +696,7 @@ class TestIntegrationScenarios:
         assert start is not None
         assert end is not None
 
-    @patch('findata.client.client.TimeSeriesDB')
+    @patch('finbase.client.client.TimeSeriesDB')
     def test_multi_column_multi_symbol_workflow(self, mock_db_class, client, mock_db):
         """Test retrieving multiple columns for multiple symbols."""
         mock_db_class.return_value = mock_db

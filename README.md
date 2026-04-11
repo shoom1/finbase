@@ -1,4 +1,4 @@
-# FinData - Historical Financial Data Management
+# FinBase - Historical Financial Data Management
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -7,14 +7,14 @@ A comprehensive system for managing historical financial time series data across
 
 ## 🎯 Purpose
 
-FinData is a data management layer designed to:
+FinBase is a data management layer designed to:
 - Download and store historical OHLCV data from multiple sources
 - Maintain a centralized SQLite database of time series
 - Track index constituents
 - Manage risk factor groups (equities, indices, FX, rates, commodities)
 - Provide a clean API for data access by analysis projects
 
-**Philosophy**: Separate data acquisition from data analysis. FinData handles the messy work of downloading, validating, and organizing financial data so your analysis code stays clean.
+**Philosophy**: Separate data acquisition from data analysis. FinBase handles the messy work of downloading, validating, and organizing financial data so your analysis code stays clean.
 
 ## ✨ Features
 
@@ -48,16 +48,16 @@ FinData is a data management layer designed to:
 
 #### Option 1: Conda (Recommended)
 ```bash
-git clone https://github.com/yourusername/findata.git
-cd findata
+git clone https://github.com/yourusername/finbase.git
+cd finbase
 conda env create -f environment.yml
-conda activate findata
+conda activate finbase
 ```
 
 #### Option 2: Pip
 ```bash
-git clone https://github.com/yourusername/findata.git
-cd findata
+git clone https://github.com/yourusername/finbase.git
+cd finbase
 pip install -e .
 
 # Or with extras
@@ -68,7 +68,7 @@ pip install -e ".[dev,dashboard]"
 
 #### 1. Initialize Database
 ```bash
-# Creates ~/.findata/timeseries.db and ~/.findatarc
+# Creates ~/.finbase/timeseries.db and ~/.finbaserc
 python scripts/setup_database.py --init
 ```
 
@@ -96,7 +96,7 @@ python scripts/setup_database.py --load-index-data SP500 --index-max-symbols 10
 
 #### 4. Access Data via API
 ```python
-from findata import DataClient
+from finbase import DataClient
 
 client = DataClient()
 
@@ -115,7 +115,7 @@ returns = prices.pct_change()
 ## 📊 Project Structure
 
 ```
-findata/
+finbase/
 ├── src/                          # Source code
 │   ├── client/                   # DataClient API for external projects
 │   ├── config/                   # Configuration management
@@ -144,9 +144,9 @@ findata/
 └── docs/                         # Quick start guides
 
 User space (created on init):
-~/.findata/
+~/.finbase/
 └── timeseries.db                 # SQLite database (shared with other projects)
-~/.findatarc                      # User configuration (YAML)
+~/.finbaserc                      # User configuration (YAML)
 ```
 
 ## 📖 Documentation
@@ -184,7 +184,7 @@ User space (created on init):
 The recommended way to access data from external projects:
 
 ```python
-from findata import DataClient
+from finbase import DataClient
 
 client = DataClient()
 

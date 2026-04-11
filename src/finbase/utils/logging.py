@@ -1,5 +1,5 @@
 """
-Logging configuration and utilities for FinData.
+Logging configuration and utilities for FinBase.
 
 This module provides a centralized logging setup with:
 - Console and file handlers
@@ -64,7 +64,7 @@ def setup_logger(
         Configured logger instance
 
     Example:
-        >>> from findata.utils.logging import setup_logger
+        >>> from finbase.utils.logging import setup_logger
         >>> logger = setup_logger(__name__)
         >>> logger.info("Application started")
         >>> logger.error("An error occurred", exc_info=True)
@@ -136,4 +136,4 @@ def get_logger(name: str) -> logging.Logger:
 
 
 # Create a default logger for the package
-default_logger = setup_logger('findata')
+default_logger = setup_logger('finbase')

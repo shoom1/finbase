@@ -1,4 +1,4 @@
-"""Configuration management for FinData."""
+"""Configuration management for FinBase."""
 
 from .settings import Settings, get_settings
 

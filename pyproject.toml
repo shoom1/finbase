@@ -3,14 +3,14 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "findata"
-version = "0.1.0"
+name = "finbase"
+version = "0.1.1"
 description = "Historical financial data management system with support for equities, indices, and multi-asset data"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "FinData Contributors"}
+    {name = "FinBase Contributors"}
 ]
 keywords = ["finance", "data", "timeseries", "equity", "index", "historical-data"]
 classifiers = [
@@ -46,10 +46,10 @@ dashboard = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/findata"
-Documentation = "https://github.com/yourusername/findata/blob/main/CLAUDE.md"
-Repository = "https://github.com/yourusername/findata"
-Issues = "https://github.com/yourusername/findata/issues"
+Homepage = "https://github.com/yourusername/finbase"
+Documentation = "https://github.com/yourusername/finbase/blob/main/CLAUDE.md"
+Repository = "https://github.com/yourusername/finbase"
+Issues = "https://github.com/yourusername/finbase/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -58,7 +58,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-findata = ["py.typed"]
+finbase = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

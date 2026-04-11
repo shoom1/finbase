@@ -1,5 +1,5 @@
 """
-FinData Dashboard - Interactive web dashboard for data availability visualization.
+FinBase Dashboard - Interactive web dashboard for data availability visualization.
 
 Run with: streamlit run dashboard_app.py
 """
@@ -17,7 +17,7 @@ from src.utils.logging import get_logger
 
 # Configure page
 st.set_page_config(
-    page_title="FinData Dashboard",
+    page_title="FinBase Dashboard",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -77,7 +77,7 @@ def render_header():
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        st.title("📊 FinData Dashboard")
+        st.title("📊 FinBase Dashboard")
         st.markdown("**Historical Financial Data Availability & Quality Monitor**")
 
     with col2:
@@ -447,7 +447,7 @@ def render_sidebar():
         st.header("ℹ️ About")
 
         st.markdown("""
-        ### FinData Dashboard
+        ### FinBase Dashboard
 
         Interactive dashboard for monitoring historical financial data availability and quality.
 
