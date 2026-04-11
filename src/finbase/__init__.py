@@ -6,10 +6,15 @@ Main exports:
 - TimeSeriesDB: Low-level database access (for internal use)
 """
 
+from importlib.metadata import version, PackageNotFoundError
+
 from .client import DataClient
 from .data.database import TimeSeriesDB
 from .config import get_settings
 
-__version__ = '0.1.1'
+try:
+    __version__ = version("finbase")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
 
 __all__ = ['DataClient', 'TimeSeriesDB', 'get_settings']
