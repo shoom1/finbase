@@ -339,9 +339,10 @@ class DataClient:
 
         # Apply pattern filter if specified
         if pattern and not df.empty:
-            # Convert SQL wildcard to regex
-            regex_pattern = pattern.replace('*', '.*').replace('%', '.*')
-            df = df[df['symbol'].str.match(f'^{regex_pattern}$', case=False)]
+            import fnmatch
+            glob_pattern = pattern.replace('%', '*').replace('_', '?')
+            mask = df['symbol'].apply(lambda s: fnmatch.fnmatch(s.upper(), glob_pattern.upper()))
+            df = df[mask]
 
         return df
 

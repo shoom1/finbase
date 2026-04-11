@@ -739,3 +739,21 @@ class TestDataClientContextManager:
         client = DataClient(db_path=temp_db_path)
         symbols = client.list_symbols()
         assert isinstance(symbols, list)
+
+    def test_search_symbols_special_chars_no_crash(self, temp_db_path):
+        """search_symbols should not crash on regex special characters."""
+        from finbase.data.database import TimeSeriesDB
+        with TimeSeriesDB(temp_db_path) as db:
+            db.initialize_schema()
+            db.add_risk_factor(
+                symbol='AAPL',
+                asset_class='equity',
+                description='Apple Inc.',
+                country='US',
+                currency='USD',
+                data_source='yfinance',
+            )
+        client = DataClient(db_path=temp_db_path)
+        # Should not raise re.error even though '(' is a regex special character
+        result = client.search_symbols(pattern='AA(')
+        assert isinstance(result, pd.DataFrame)
