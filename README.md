@@ -3,30 +3,23 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive system for managing historical financial time series data across multiple asset classes. Built for quantitative researchers, traders, and financial engineers who need reliable, well-organized market data.
+A simple tool for downloading and storing historical equity data in a local SQLite database. Currently supports equities and major indices via YFinance.
 
-## 🎯 Purpose
+## 🎯 What It Does
 
-FinBase is a data management layer designed to:
-- Download and store historical OHLCV data from multiple sources
-- Maintain a centralized SQLite database of time series
-- Track index constituents
-- Manage risk factor groups (equities, indices, FX, rates, commodities)
-- Provide a clean API for data access by analysis projects
-
-**Philosophy**: Separate data acquisition from data analysis. FinBase handles the messy work of downloading, validating, and organizing financial data so your analysis code stays clean.
+- Downloads historical OHLCV data from YFinance
+- Stores it in a centralized SQLite database (`~/.finbase/timeseries.db`)
+- Tracks index constituents (S&P 500, DOW 30, NASDAQ-100, FTSE 100, DAX)
+- Provides a Python API for querying the data
 
 ## ✨ Features
 
-### Core Capabilities
-- **Multi-Asset Support**: Equities, indices, FX (planned), rates (planned), commodities (planned)
-- **Index Management**: Track constituents for SP500, DOW30, NASDAQ-100, FTSE 100, DAX
-- **Temporal Tracking**: Historical point-in-time index composition queries
-- **Smart Loading**: Automatic skip of existing data with resumable downloads
-- **Rate Limiting**: Conservative API throttling to respect data provider limits
-- **Data Quality**: Metadata tracking, audit trails, validation
+- **Index Constituent Tracking**: Historical point-in-time composition for 5 major indices
+- **Smart Loading**: Skips existing data, resumable downloads
+- **Rate Limiting**: Conservative throttling to avoid hitting YFinance limits
+- **DataClient API**: Simple read API for use by other projects
 
-### Index Support (v0.1.0)
+### Index Support
 
 | Index | Constituents | Country | Data Source |
 |-------|-------------|---------|-------------|
@@ -36,11 +29,8 @@ FinBase is a data management layer designed to:
 | FTSE 100 | 100 | 🇬🇧 UK | Wikipedia |
 | DAX | 41 | 🇩🇪 Germany | Wikipedia |
 
-### Data Sources Support
-- **YFinance**: Equity and index data (current)
-- **FRED API**: US Treasury rates, economic indicators (planned)
-- **Alpha Vantage**: FX=, commodity data and alternative equity (planned)
-- **Polygon.io**: Alternative equity data (planned)
+### Data Source
+- **YFinance**: Equity and index data
 
 ## 🚀 Quick Start
 
@@ -48,7 +38,7 @@ FinBase is a data management layer designed to:
 
 #### Option 1: Conda (Recommended)
 ```bash
-git clone https://github.com/yourusername/finbase.git
+git clone https://github.com/shoom1/finbase.git
 cd finbase
 conda env create -f environment.yml
 conda activate finbase
@@ -56,7 +46,7 @@ conda activate finbase
 
 #### Option 2: Pip
 ```bash
-git clone https://github.com/yourusername/finbase.git
+git clone https://github.com/shoom1/finbase.git
 cd finbase
 pip install -e .
 
@@ -151,9 +141,9 @@ User space (created on init):
 
 ## 📖 Documentation
 
-- **[QUICK_START_INDEX_DATA.md](QUICK_START_INDEX_DATA.md)** - Loading index data guide
-- **[QUICKSTART_INDEX_MANAGEMENT.md](QUICKSTART_INDEX_MANAGEMENT.md)** - Managing indices
-- **[DASHBOARD.md](DASHBOARD.md)** - Running the web dashboard
+- **[QUICK_START_INDEX_DATA.md](docs/QUICK_START_INDEX_DATA.md)** - Loading index data guide
+- **[QUICKSTART_INDEX_MANAGEMENT.md](docs/QUICKSTART_INDEX_MANAGEMENT.md)** - Managing indices
+- **[DASHBOARD.md](docs/DASHBOARD.md)** - Running the web dashboard
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history
 
 ## 🔑 Key Concepts
@@ -208,11 +198,6 @@ tech_stocks = client.get_by_sector('Technology')
 ```
 
 See `examples/client_api_examples.py` for comprehensive usage.
-
-### Database Performance
-- SQLite is optimized for <1M records
-- Typical portfolio (100 stocks, 20 years) = ~500K records
-- For larger datasets, migration to DuckDB planned for v0.3.0
 
 ## 🛠️ Advanced Usage
 
@@ -287,16 +272,12 @@ pytest
 pytest --cov=src tests/
 ```
 
-### Project Status
-- ✅ Core database system
-- ✅ Index management (5 major indices)
-- ✅ DataClient API
-- ✅ Smart loading with rate limiting
-- ✅ Dashboard
-- ⏳ FX data support (planned v0.2.0)
-- ⏳ Rates data via FRED (planned v0.2.0)
-- ⏳ Alternative data sources (planned v0.3.0)
-- ⏳ DuckDB migration (planned v0.3.0)
+### What's Working
+- Core database system
+- Index management (5 major indices)
+- DataClient API
+- Smart loading with rate limiting
+- Streamlit dashboard
 
 ## 📝 License
 

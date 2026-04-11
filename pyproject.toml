@@ -46,10 +46,10 @@ dashboard = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/finbase"
-Documentation = "https://github.com/yourusername/finbase/blob/main/CLAUDE.md"
-Repository = "https://github.com/yourusername/finbase"
-Issues = "https://github.com/yourusername/finbase/issues"
+Homepage = "https://github.com/shoom1/finbase"
+Documentation = "https://github.com/shoom1/finbase/blob/main/CLAUDE.md"
+Repository = "https://github.com/shoom1/finbase"
+Issues = "https://github.com/shoom1/finbase/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
