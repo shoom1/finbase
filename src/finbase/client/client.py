@@ -7,6 +7,7 @@ Provides simple, intuitive interface for querying financial data.
 import pandas as pd
 from typing import List, Optional, Union, Dict, Tuple
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 from ..data.database import TimeSeriesDB, DatabaseError
 from ..data.database.index_db import IndexDB
@@ -59,11 +60,38 @@ class DataClient:
                      (which reads from ~/.finbaserc)
         """
         self.db_path = db_path or get_settings().database.path
+        self._db: Optional[TimeSeriesDB] = None
         logger.debug(f"DataClient initialized with database: {self.db_path}")
 
-    def _get_db(self) -> TimeSeriesDB:
-        """Get database connection (auto-managed)."""
-        return TimeSeriesDB(self.db_path)
+    def __enter__(self):
+        """Open a persistent database connection."""
+        self._db = TimeSeriesDB(self.db_path)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Close the persistent database connection."""
+        if self._db is not None:
+            self._db.close()
+            self._db = None
+        return False
+
+    @contextmanager
+    def _get_db(self):
+        """
+        Get database connection as a context manager.
+
+        If DataClient is used as a context manager, reuses the persistent
+        connection (does not close it on exit).
+        Otherwise, creates a temporary connection and closes it on exit.
+        """
+        if self._db is not None:
+            yield self._db
+        else:
+            db = TimeSeriesDB(self.db_path)
+            try:
+                yield db
+            finally:
+                db.close()
 
     def get_data(
         self,

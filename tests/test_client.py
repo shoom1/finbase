@@ -709,3 +709,33 @@ class TestIntegrationScenarios:
         # 2 symbols × 2 metrics × 3 days = 12 rows
         assert set(df['symbol'].unique()) == {'AAPL', 'MSFT'}
         assert set(df['metric'].unique()) == {'close', 'volume'}
+
+
+# ============================================================================
+# Test Context Manager Support
+# ============================================================================
+
+class TestDataClientContextManager:
+    """Tests for DataClient context manager support."""
+
+    def test_context_manager_opens_and_closes(self, temp_db_path):
+        """DataClient should work as a context manager."""
+        from finbase.data.database import TimeSeriesDB
+        with TimeSeriesDB(temp_db_path) as db:
+            db.initialize_schema()
+
+        with DataClient(db_path=temp_db_path) as client:
+            symbols = client.list_symbols()
+            assert isinstance(symbols, list)
+        # After exit, the internal DB connection should be closed
+        assert client._db is None
+
+    def test_works_without_context_manager(self, temp_db_path):
+        """DataClient should still work without 'with' for backward compat."""
+        from finbase.data.database import TimeSeriesDB
+        with TimeSeriesDB(temp_db_path) as db:
+            db.initialize_schema()
+
+        client = DataClient(db_path=temp_db_path)
+        symbols = client.list_symbols()
+        assert isinstance(symbols, list)
