@@ -56,9 +56,14 @@ class TimeSeriesDB:
             db_path = get_settings().database.path
 
         self.db_path = Path(db_path).expanduser()
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = None
-        self._connect()
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._connect()
+        except DatabaseError:
+            raise
+        except Exception as e:
+            raise DatabaseError(f"Failed to initialize database at {self.db_path}: {e}")
 
     def _connect(self, max_retries: int = 3):
         """
