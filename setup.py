@@ -13,7 +13,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="finbase",
-    version="0.1.0",
+    version="0.1.1",
     description="Historical financial data management system with support for equities, indices, and multi-asset data",
     long_description=long_description,
     long_description_content_type="text/markdown",

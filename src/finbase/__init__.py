@@ -10,6 +10,6 @@ from .client import DataClient
 from .data.database import TimeSeriesDB
 from .config import get_settings
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 __all__ = ['DataClient', 'TimeSeriesDB', 'get_settings']

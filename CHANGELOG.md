@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2026-04-10
+
+### Changed
+- **Project renamed from findata to finbase** for PyPI availability
+  - Package: `findata` → `finbase`
+  - Config: `~/.findatarc` → `~/.finbaserc`, `~/.findata/` → `~/.finbase/`
+  - Env vars: `FINDATA_*` → `FINBASE_*`
+
+### Fixed
+- **DataClient.get_data() N+1 query**: queries all symbols at once per column instead of one DB call per symbol×column combination
+- **IndexDB connection bypass**: now uses the injected TimeSeriesDB connection instead of opening independent sqlite3 connections per method call
+- **Silent data loss in DataClient.get_data()**: unexpected errors now propagate to the caller instead of being silently swallowed; only DatabaseError (no data found) is handled gracefully
+
+---
+
 ## [0.1.0] - 2025-12-09
 
 ### Added
