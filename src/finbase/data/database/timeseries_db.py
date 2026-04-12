@@ -521,6 +521,100 @@ class TimeSeriesDB:
         df = pd.read_sql_query(sql, self.conn, params=params)
         return df
 
+    def count_timeseries_rows(self) -> int:
+        """
+        Count all rows in the timeseries_data table.
+
+        Returns:
+            Total number of OHLCV records across all risk factors.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM timeseries_data")
+            return int(cursor.fetchone()[0])
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to count timeseries rows: {e}")
+
+    def get_timeseries_date_bounds(self) -> tuple:
+        """
+        Get the earliest and latest date present in timeseries_data.
+
+        Returns:
+            Tuple of (min_date, max_date) as ISO-format strings, or
+            (None, None) if the table is empty.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT MIN(date), MAX(date) FROM timeseries_data")
+            row = cursor.fetchone()
+            return (row[0], row[1])
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get timeseries date bounds: {e}")
+
+    def get_latest_update_timestamp(self) -> Optional[str]:
+        """
+        Get the most recent last_updated timestamp across all risk factors.
+
+        Returns:
+            Timestamp string of the most recent risk factor update, or
+            None if no risk factors exist.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT MAX(last_updated) FROM risk_factors")
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get latest update timestamp: {e}")
+
+    def get_coverage_summary(self) -> pd.DataFrame:
+        """
+        Get a per-symbol coverage summary joining risk_factors and timeseries_data.
+
+        For each active risk factor, returns its metadata alongside the count
+        and date range of its actual timeseries rows.
+
+        Returns:
+            DataFrame with columns:
+                symbol, asset_class, sector, start_date, end_date,
+                data_points, actual_start, actual_end
+            Empty DataFrame if no active risk factors exist.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            sql = """
+                SELECT
+                    rf.symbol,
+                    rf.asset_class,
+                    rf.sector,
+                    rf.start_date,
+                    rf.end_date,
+                    COUNT(td.ts_id) AS data_points,
+                    MIN(td.date) AS actual_start,
+                    MAX(td.date) AS actual_end
+                FROM risk_factors rf
+                LEFT JOIN timeseries_data td
+                    ON rf.risk_factor_id = td.risk_factor_id
+                WHERE rf.is_active = 1
+                GROUP BY rf.risk_factor_id, rf.symbol, rf.asset_class,
+                         rf.sector, rf.start_date, rf.end_date
+                ORDER BY rf.asset_class, rf.symbol
+            """
+            return pd.read_sql_query(sql, self.conn)
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get coverage summary: {e}")
+
     def close(self):
         """Close database connection."""
         if self.conn:
