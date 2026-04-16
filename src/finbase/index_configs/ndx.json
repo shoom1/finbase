@@ -3,6 +3,7 @@
   "index_name": "NASDAQ-100",
   "description": "NASDAQ-100 Index - 100 largest non-financial companies on NASDAQ",
   "country": "US",
+  "currency": "USD",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/NASDAQ-100",

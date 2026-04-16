@@ -1,139 +1,152 @@
 """
 Logging configuration and utilities for FinBase.
 
-This module provides a centralized logging setup with:
-- Console and file handlers
-- Log rotation
-- Configurable log levels
-- Structured log formatting
+Library policy: importing any finbase module must NOT touch the filesystem
+or attach console handlers. Modules call `get_logger(__name__)` which only
+returns a stdlib logger and adds a `NullHandler` once on the root finbase
+logger so that records are silently dropped if the application never opts
+in.
+
+Application policy: entry-point scripts (CLI, dashboard, examples) call
+`configure_application_logging()` once at startup. That is the only place
+that ever creates files or writes to stderr.
 """
 
 import logging
 import logging.handlers
+import sys
 from pathlib import Path
 from typing import Optional
-import sys
+
+
+_PACKAGE_LOGGER_NAME = "finbase"
+_DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+_DEFAULT_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 
 class ColoredFormatter(logging.Formatter):
-    """Custom formatter with color support for console output."""
+    """Colorize the levelname when stderr is a TTY."""
 
-    # ANSI color codes
     COLORS = {
-        'DEBUG': '\033[36m',    # Cyan
-        'INFO': '\033[32m',     # Green
-        'WARNING': '\033[33m',  # Yellow
-        'ERROR': '\033[31m',    # Red
-        'CRITICAL': '\033[35m'  # Magenta
+        "DEBUG": "\033[36m",
+        "INFO": "\033[32m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[35m",
     }
-    RESET = '\033[0m'
+    RESET = "\033[0m"
 
     def format(self, record):
-        """Format the log record with colors for console output."""
-        if hasattr(sys.stderr, 'isatty') and sys.stderr.isatty():
-            # Add color to levelname
+        if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
             levelname = record.levelname
             if levelname in self.COLORS:
                 record.levelname = f"{self.COLORS[levelname]}{levelname}{self.RESET}"
-
         return super().format(record)
 
 
-def setup_logger(
-    name: str,
-    log_dir: str = "logs",
-    log_level: str = "INFO",
-    console_output: bool = True,
-    file_output: bool = True,
-    max_bytes: int = 10_000_000,  # 10MB
-    backup_count: int = 5
-) -> logging.Logger:
-    """
-    Set up a logger with console and file handlers.
-
-    Args:
-        name: Logger name (typically __name__ of the module)
-        log_dir: Directory for log files
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        console_output: Whether to output to console
-        file_output: Whether to output to file
-        max_bytes: Maximum size of log file before rotation
-        backup_count: Number of backup files to keep
-
-    Returns:
-        Configured logger instance
-
-    Example:
-        >>> from finbase.utils.logging import setup_logger
-        >>> logger = setup_logger(__name__)
-        >>> logger.info("Application started")
-        >>> logger.error("An error occurred", exc_info=True)
-    """
-    logger = logging.getLogger(name)
-
-    # Avoid duplicate handlers if logger already configured
-    if logger.handlers:
-        return logger
-
-    logger.setLevel(getattr(logging, log_level.upper()))
-
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    colored_formatter = ColoredFormatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    # Console handler
-    if console_output:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(colored_formatter)
-        logger.addHandler(console_handler)
-
-    # File handler with rotation
-    if file_output:
-        log_path = Path(log_dir)
-        log_path.mkdir(exist_ok=True)
-
-        # Sanitize logger name for filename
-        safe_name = name.replace('.', '_')
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_path / f"{safe_name}.log",
-            maxBytes=max_bytes,
-            backupCount=backup_count
-        )
-        file_handler.setLevel(logging.DEBUG)  # File gets all levels
-        file_handler.setFormatter(detailed_formatter)
-        logger.addHandler(file_handler)
-
-    # Prevent propagation to root logger
-    logger.propagate = False
-
-    return logger
+def _ensure_null_handler() -> logging.Logger:
+    """Attach a NullHandler to the package root logger exactly once."""
+    root = logging.getLogger(_PACKAGE_LOGGER_NAME)
+    if not any(isinstance(h, logging.NullHandler) for h in root.handlers):
+        root.addHandler(logging.NullHandler())
+    return root
 
 
 def get_logger(name: str) -> logging.Logger:
     """
-    Get an existing logger or create a new one with default settings.
+    Return a stdlib logger for `name`.
+
+    Side-effect-free: only ensures the package root has a NullHandler so
+    library users who never configure logging don't see "No handlers could
+    be found" warnings.
+    """
+    _ensure_null_handler()
+    return logging.getLogger(name)
+
+
+def configure_application_logging(
+    log_dir: Optional[str] = None,
+    log_level: str = "INFO",
+    console_output: bool = True,
+    file_output: bool = True,
+    max_bytes: int = 10_000_000,
+    backup_count: int = 5,
+) -> logging.Logger:
+    """
+    Configure the package root logger for an application entry point.
+
+    Idempotent: calling more than once replaces previously installed
+    handlers. Safe to call from `scripts/setup_database.py`,
+    `dashboard_app.py`, etc.
 
     Args:
-        name: Logger name (typically __name__ of the module)
+        log_dir: Directory for rotating log files. If None, falls back to
+            `Settings.logging.log_dir`. Resolved relative to the user's
+            home (`~/.finbase/logs`) when not absolute, so different cwds
+            don't sprout new directories.
+        log_level: Threshold for the package logger.
+        console_output: Mirror records to stderr.
+        file_output: Write records to a rotating file in `log_dir`.
+        max_bytes: Per-file rotation size.
+        backup_count: Number of rotated backups to retain.
 
     Returns:
-        Logger instance
+        The configured package root logger.
     """
-    logger = logging.getLogger(name)
+    root = _ensure_null_handler()
 
-    if not logger.handlers:
-        return setup_logger(name)
+    # Tear down any previously installed non-Null handlers so re-config is clean.
+    for handler in list(root.handlers):
+        if not isinstance(handler, logging.NullHandler):
+            root.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
 
-    return logger
+    root.setLevel(getattr(logging, log_level.upper()))
+    root.propagate = False
+
+    if console_output:
+        console = logging.StreamHandler(sys.stderr)
+        console.setLevel(getattr(logging, log_level.upper()))
+        console.setFormatter(
+            ColoredFormatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT)
+        )
+        root.addHandler(console)
+
+    if file_output:
+        resolved_dir = _resolve_log_dir(log_dir)
+        resolved_dir.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.handlers.RotatingFileHandler(
+            resolved_dir / "finbase.log",
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(
+            logging.Formatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT)
+        )
+        root.addHandler(file_handler)
+
+    return root
 
 
-# Create a default logger for the package
-default_logger = setup_logger('finbase')
+def _resolve_log_dir(log_dir: Optional[str]) -> Path:
+    """Resolve `log_dir` against settings/home so cwd is irrelevant."""
+    if log_dir is None:
+        # Lazy import: settings imports get_logger via cascading modules.
+        from ..config import get_settings
+
+        log_dir = get_settings().logging.log_dir
+
+    path = Path(log_dir).expanduser()
+    if not path.is_absolute():
+        path = Path.home() / ".finbase" / path
+    return path
+
+
+# Initialize the NullHandler at module import — that *is* allowed; it does
+# no I/O and prevents "No handlers" warnings without touching the filesystem.
+_ensure_null_handler()

@@ -349,8 +349,8 @@ class TimeSeriesDB:
     def query(
         self,
         symbols: List[str],
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         column: str = 'adj_close',
         asset_class: Optional[str] = None,
         data_source: str = 'yfinance'
@@ -360,8 +360,8 @@ class TimeSeriesDB:
 
         Args:
             symbols: List of symbols to query
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
+            start_date: Start date (YYYY-MM-DD). If None, no lower bound.
+            end_date: End date (YYYY-MM-DD). If None, no upper bound.
             column: Column to return (close, adj_close, open, high, low, volume)
             asset_class: Optional asset class filter
             data_source: Data source filter
@@ -385,12 +385,17 @@ class TimeSeriesDB:
                 f"Invalid column '{column}'. Must be one of: {VALID_QUERY_COLUMNS}"
             )
 
-        # Validate date format
-        try:
-            pd.to_datetime(start_date)
-            pd.to_datetime(end_date)
-        except Exception as e:
-            raise ValidationError(f"Invalid date format (use YYYY-MM-DD): {e}")
+        # Validate date format only when supplied (None means "no bound")
+        if start_date is not None:
+            try:
+                pd.to_datetime(start_date)
+            except Exception as e:
+                raise ValidationError(f"Invalid start_date format (use YYYY-MM-DD): {e}")
+        if end_date is not None:
+            try:
+                pd.to_datetime(end_date)
+            except Exception as e:
+                raise ValidationError(f"Invalid end_date format (use YYYY-MM-DD): {e}")
 
         try:
             cursor = self.conn.cursor()
@@ -429,20 +434,29 @@ class TimeSeriesDB:
 
                 rf_id = symbol_to_id[symbol]
 
-                # Safe to use column in f-string after validation
-                query_sql = f"""
-                    SELECT date, {column}
-                    FROM timeseries_data
-                    WHERE risk_factor_id = ?
-                    AND date >= ?
-                    AND date <= ?
-                    ORDER BY date
-                """
+                # Build WHERE clause dynamically so None bounds become open ranges.
+                # Comparing date columns against SQL NULL yields NULL (falsy),
+                # which would silently drop every row — hence the conditional
+                # predicate construction below.
+                where_clauses = ["risk_factor_id = ?"]
+                params: List = [rf_id]
+                if start_date is not None:
+                    where_clauses.append("date >= ?")
+                    params.append(start_date)
+                if end_date is not None:
+                    where_clauses.append("date <= ?")
+                    params.append(end_date)
+
+                # Safe to use column in f-string after allowlist validation.
+                query_sql = (
+                    f"SELECT date, {column} FROM timeseries_data "
+                    f"WHERE {' AND '.join(where_clauses)} ORDER BY date"
+                )
 
                 df = pd.read_sql_query(
                     query_sql,
                     self.conn,
-                    params=(rf_id, start_date, end_date),
+                    params=tuple(params),
                     parse_dates=['date'],
                     index_col='date'
                 )

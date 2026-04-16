@@ -9,6 +9,7 @@ Dow 30, NASDAQ-100, etc.) without code changes.
 import pandas as pd
 import requests
 import json
+import os
 from typing import Dict, Optional, List
 from pathlib import Path
 from datetime import datetime
@@ -322,3 +323,101 @@ class WikipediaIndexParser:
             summary['country'] = self.config['country']
 
         return summary
+
+    def get_summary_stats(self) -> Dict:
+        """
+        Richer summary including changes metadata.
+
+        Builds on `get_summary()` and adds the historical-changes view —
+        total change count, the five most recent additions and removals,
+        and a `data_date` ISO timestamp. Indices without a changes table
+        get empty lists for additions/removals and zero for total_changes.
+        """
+        summary = self.get_summary()
+        summary['data_date'] = datetime.now().isoformat()
+
+        changes = self.get_changes()
+        if changes is None or changes.empty:
+            summary['total_changes'] = 0
+            summary['recent_additions'] = []
+            summary['recent_removals'] = []
+            return summary
+
+        summary['total_changes'] = len(changes)
+
+        recent = changes.head(10)
+        if 'added_ticker' in recent.columns:
+            additions = recent[recent['added_ticker'].notna()][
+                [c for c in ('date', 'added_ticker', 'added_company') if c in recent.columns]
+            ].head(5)
+            summary['recent_additions'] = additions.to_dict('records')
+        else:
+            summary['recent_additions'] = []
+
+        if 'removed_ticker' in recent.columns:
+            removals = recent[recent['removed_ticker'].notna()][
+                [c for c in ('date', 'removed_ticker', 'removed_company') if c in recent.columns]
+            ].head(5)
+            summary['recent_removals'] = removals.to_dict('records')
+        else:
+            summary['recent_removals'] = []
+
+        return summary
+
+    def export_to_csv(
+        self,
+        output_dir: str = ".",
+        prefix: Optional[str] = None,
+    ) -> Dict[str, Optional[str]]:
+        """
+        Export constituents (and changes if available) to timestamped CSVs.
+
+        Args:
+            output_dir: Directory for output files. Created if missing.
+            prefix: Filename prefix (default: lower-case index code, e.g. 'sp500').
+
+        Returns:
+            Dict mapping {'constituents': path, 'changes': path-or-None}.
+        """
+        return self._export(output_dir, prefix, fmt='csv')
+
+    def export_to_json(
+        self,
+        output_dir: str = ".",
+        prefix: Optional[str] = None,
+    ) -> Dict[str, Optional[str]]:
+        """JSON twin of `export_to_csv`. See that method for arguments."""
+        return self._export(output_dir, prefix, fmt='json')
+
+    def _export(
+        self,
+        output_dir: str,
+        prefix: Optional[str],
+        fmt: str,
+    ) -> Dict[str, Optional[str]]:
+        if prefix is None:
+            prefix = self.index_code.lower()
+
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d")
+        ext = fmt
+
+        constituents = self.get_constituents()
+        constituents_path = os.path.join(output_dir, f"{prefix}_constituents_{timestamp}.{ext}")
+        if fmt == 'csv':
+            constituents.to_csv(constituents_path, index=False)
+        else:
+            constituents.to_json(constituents_path, orient='records', date_format='iso', indent=2)
+        logger.info(f"Exported {self.index_code} constituents to {constituents_path}")
+
+        changes = self.get_changes()
+        changes_path: Optional[str] = None
+        if changes is not None and not changes.empty:
+            changes_path = os.path.join(output_dir, f"{prefix}_changes_{timestamp}.{ext}")
+            if fmt == 'csv':
+                changes.to_csv(changes_path, index=False)
+            else:
+                changes.to_json(changes_path, orient='records', date_format='iso', indent=2)
+            logger.info(f"Exported {self.index_code} changes to {changes_path}")
+
+        return {'constituents': constituents_path, 'changes': changes_path}

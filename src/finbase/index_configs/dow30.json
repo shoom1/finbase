@@ -3,6 +3,7 @@
   "index_name": "Dow Jones Industrial Average",
   "description": "Dow Jones 30 Industrial Average - Blue Chip US Stocks",
   "country": "US",
+  "currency": "USD",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average",

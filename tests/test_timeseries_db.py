@@ -292,11 +292,21 @@ class TestQuery:
 
     def test_query_invalid_date_format(self, populated_db, sample_risk_factor_data):
         """Test validation for invalid date format."""
-        with pytest.raises(ValidationError, match="Invalid date format"):
+        with pytest.raises(ValidationError, match="Invalid start_date format"):
             populated_db.query(
                 symbols=[sample_risk_factor_data['symbol']],
                 start_date='not-a-date',  # Invalid date
                 end_date='2024-01-31',
+                data_source=sample_risk_factor_data['data_source']
+            )
+
+    def test_query_invalid_end_date_format(self, populated_db, sample_risk_factor_data):
+        """Symmetric check for the end_date validation message."""
+        with pytest.raises(ValidationError, match="Invalid end_date format"):
+            populated_db.query(
+                symbols=[sample_risk_factor_data['symbol']],
+                start_date='2024-01-01',
+                end_date='not-a-date',
                 data_source=sample_risk_factor_data['data_source']
             )
 

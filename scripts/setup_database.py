@@ -22,12 +22,18 @@ from typing import Optional
 from finbase.data.database import TimeSeriesDB
 from finbase.data.database.index_db import IndexDB
 from finbase.data.loaders import EquityLoader
-from finbase.data.risk_factor_groups import RiskFactorGroup, EquityRiskFactorGroup
+from finbase.data.risk_factor_groups import (
+    RiskFactorGroup,
+    EquityRiskFactorGroup,
+    MarketCapEnricher,
+)
 from finbase.data.index_updater import IndexUpdater
+from finbase.data.parsers.wikipedia_index_parser import WikipediaIndexParser
 from finbase.config.user_config import initialize_user_space
 from finbase.config import get_settings
-from finbase.utils.logging import get_logger
+from finbase.utils.logging import configure_application_logging, get_logger
 
+configure_application_logging()
 logger = get_logger(__name__)
 
 
@@ -70,58 +76,95 @@ def initialize_database(db_path: str = None):
     return db
 
 
+SP500_GROUP_PATH = "data/risk_factor_groups/equities/sp500.json"
+
+
+def _build_sp500_config_from_wikipedia() -> dict:
+    """Fetch SP500 constituents via the generic parser and shape them
+    into a risk-factor-group config dict (the format saved to disk)."""
+    parser = WikipediaIndexParser.from_index_code("SP500")
+    constituents = parser.get_constituents()
+    cfg = parser.config
+
+    # YFinance accepts dot-notation tickers as dashes (BRK.B → BRK-B).
+    risk_factors = []
+    for _, row in constituents.iterrows():
+        risk_factors.append(
+            {
+                "symbol": str(row["symbol"]).replace(".", "-"),
+                "description": row.get("company_name", row["symbol"]),
+                "country": cfg.get("country", "US"),
+                "currency": cfg.get("currency", "USD"),
+                "sector": row.get("sector"),
+                "sub_industry": row.get("sub_industry"),
+                "headquarters": row.get("headquarters"),
+                "date_added": str(row.get("date_added_to_index") or ""),
+                "cik": str(row.get("cik") or ""),
+                "founded": str(row.get("founded") or ""),
+            }
+        )
+
+    return {
+        "group_name": "sp500",
+        "description": "S&P 500 constituents (auto-updated from Wikipedia)",
+        "asset_class": "equity",
+        "asset_subclass": "stock",
+        "data_source": "yfinance",
+        "frequency": "daily",
+        "update_method": "wikipedia_index_parser",
+        "update_url": cfg.get("url"),
+        "risk_factors": risk_factors,
+    }
+
+
 def setup_sp500_group():
-    """Create and update S&P 500 group from Wikipedia."""
+    """Create and update the S&P 500 group from Wikipedia.
+
+    Always rebuilds the group's risk-factor list from the live Wikipedia
+    snapshot. Existing market-cap and category fields would be overwritten
+    by this rebuild, so run --update-market-caps afterwards if you want
+    them populated.
+    """
     print("\n" + "=" * 60)
     print("Setting up S&P 500 Risk Factor Group")
     print("=" * 60)
 
-    group_path = "data/risk_factor_groups/equities/sp500.json"
+    print("Fetching SP500 constituents from Wikipedia...")
+    config = _build_sp500_config_from_wikipedia()
 
-    # Create initial structure if doesn't exist
-    if not Path(group_path).exists():
-        print(f"Creating new S&P 500 group file...")
-
-        # Create minimal structure
-        sp500_mgr = EquityRiskFactorGroup.__new__(EquityRiskFactorGroup)
-        sp500_mgr.group_path = Path(group_path)
-        sp500_mgr.config = {
-            "group_name": "sp500",
-            "description": "S&P 500 constituents (auto-updated from Wikipedia)",
-            "asset_class": "equity",
-            "asset_subclass": "stock",
-            "data_source": "yfinance",
-            "frequency": "daily",
-            "update_method": "scrape_wikipedia",
-            "update_url": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-            "risk_factors": []
+    # Preserve enriched fields (market_cap, etc.) from the existing file
+    # by merging them onto the freshly-fetched factors when possible.
+    existing_path = Path(SP500_GROUP_PATH)
+    if existing_path.exists():
+        existing = RiskFactorGroup(group_path=str(existing_path))
+        existing_by_symbol = {
+            rf["symbol"]: rf for rf in existing.config.get("risk_factors", [])
         }
+        for rf in config["risk_factors"]:
+            old = existing_by_symbol.get(rf["symbol"], {})
+            if "market_cap" in old:
+                rf["market_cap"] = old["market_cap"]
+            if "market_cap_category" in old:
+                rf["market_cap_category"] = old["market_cap_category"]
 
-        # Ensure directory exists
-        sp500_mgr.group_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Fetch from Wikipedia
-        sp500_mgr.update_from_wikipedia_sp500()
-
-    else:
-        print(f"S&P 500 group already exists, updating...")
-        sp500_mgr = EquityRiskFactorGroup(group_path)
-        sp500_mgr.update_from_wikipedia_sp500()
+    sp500_mgr = EquityRiskFactorGroup(data=config)
+    sp500_mgr.save(path=SP500_GROUP_PATH)
 
     print(f"\n✓ S&P 500 group ready with {sp500_mgr.count()} stocks")
-
     return sp500_mgr
 
 
 def update_sp500_market_caps():
-    """Update market caps for S&P 500."""
+    """Enrich the S&P 500 group with market caps via YFinance."""
     print("\n" + "=" * 60)
     print("Updating S&P 500 Market Caps")
     print("=" * 60)
     print("⚠️  This will take 10-15 minutes...")
 
-    sp500 = EquityRiskFactorGroup("data/risk_factor_groups/equities/sp500.json")
-    sp500.update_market_caps(batch_size=50)
+    sp500 = EquityRiskFactorGroup(group_path=SP500_GROUP_PATH)
+    enricher = MarketCapEnricher()
+    enricher.enrich(sp500, save_every=50)
+    sp500.save()
 
     print("\n✓ Market caps updated")
 
@@ -164,8 +207,8 @@ def load_indices(db: TimeSeriesDB, start_date: str = "2005-01-01", max_symbols: 
     # Load indices group
     indices = RiskFactorGroup("data/risk_factor_groups/equities/indices.json")
 
-    # Use conservative rate limiting: 5s between stocks, 30s every 10
-    loader = EquityLoader(db, delay_seconds=5.0, batch_size=10, batch_pause=30.0)
+    # Rate limiting comes from Settings.rate_limit (override via FINBASE_YFINANCE_*).
+    loader = EquityLoader(db)
     loader.load_from_group(indices, start_date=start_date, end_date=end_date, max_symbols=max_symbols, skip_existing=skip_existing)
 
     print(f"\n✓ Indices loaded from {start_date} to {end_date}")
@@ -190,8 +233,7 @@ def load_sp500_top_n(db: TimeSeriesDB, n: int = 10, start_date: str = "2005-01-0
 
     print(f"Loading {len(symbols_to_load)} stocks...")
 
-    # Use conservative rate limiting
-    loader = EquityLoader(db, delay_seconds=5.0, batch_size=10, batch_pause=30.0)
+    loader = EquityLoader(db)
 
     for symbol in symbols_to_load:
         rf_data = sp500.get_risk_factor(symbol)
@@ -237,6 +279,10 @@ def load_index_constituents(
     """
     from finbase.data.database.index_db import IndexDB
     from finbase.data.loaders.equity_loader import EquityLoader
+    from finbase.data.parsers.wikipedia_index_parser import (
+        WikipediaIndexParser,
+        WikipediaIndexParserError,
+    )
 
     print("\n" + "=" * 60)
     print(f"Loading {index_code} Constituent Data")
@@ -269,29 +315,19 @@ def load_index_constituents(
         print("ℹ️  Skipping symbols that already have data")
     print()
 
-    # Determine country/currency defaults based on index
-    country_map = {
-        'SP500': 'US',
-        'DOW30': 'US',
-        'NDX': 'US',
-        'FTSE100': 'GB',
-        'DAX': 'DE'
-    }
-    currency_map = {
-        'SP500': 'USD',
-        'DOW30': 'USD',
-        'NDX': 'USD',
-        'FTSE100': 'GBP',
-        'DAX': 'EUR'
-    }
+    # Resolve country/currency from the index config (single source of truth).
+    try:
+        index_config = WikipediaIndexParser.from_index_code(index_code).config
+    except WikipediaIndexParserError as e:
+        print(f"✗ Could not load config for {index_code}: {e}")
+        return
 
-    default_country = country_map.get(index_code, 'US')
-    default_currency = currency_map.get(index_code, 'USD')
+    default_country = index_config.get('country', 'US')
+    default_currency = index_config.get('currency', 'USD')
 
     end_date = datetime.now().strftime('%Y-%m-%d')
 
-    # Use conservative rate limiting
-    loader = EquityLoader(db, delay_seconds=5.0, batch_size=10, batch_pause=30.0)
+    loader = EquityLoader(db)
 
     loaded_count = 0
     skipped_count = 0

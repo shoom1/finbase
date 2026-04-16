@@ -3,6 +3,7 @@
   "index_name": "FTSE 100",
   "description": "FTSE 100 Index - 100 largest companies on London Stock Exchange",
   "country": "GB",
+  "currency": "GBP",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/FTSE_100_Index",

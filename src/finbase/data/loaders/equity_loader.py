@@ -23,27 +23,43 @@ class LoaderError(Exception):
 class EquityLoader:
     """Loader for equity data from YFinance with rate limiting."""
 
-    def __init__(self, db: TimeSeriesDB, delay_seconds: float = 5.0, batch_size: int = 10, batch_pause: float = 30.0):
+    def __init__(
+        self,
+        db: TimeSeriesDB,
+        delay_seconds: Optional[float] = None,
+        batch_size: Optional[int] = None,
+        batch_pause: Optional[float] = None,
+    ):
         """
-        Initialize equity loader with conservative rate limiting.
+        Initialize equity loader with rate limiting.
+
+        Any rate-limit argument left as ``None`` is resolved from
+        ``Settings.rate_limit`` at construction time, so values flow from
+        ``~/.finbaserc`` or ``FINBASE_YFINANCE_*`` env vars without the
+        caller having to know they exist.
 
         Args:
             db: TimeSeriesDB instance
-            delay_seconds: Delay between each symbol request (default: 5s)
-            batch_size: Number of symbols before longer pause (default: 10)
-            batch_pause: Additional pause after each batch (default: 30s)
+            delay_seconds: Delay between each symbol request. Defaults to
+                ``settings.rate_limit.yfinance_delay_seconds`` (5s).
+            batch_size: Number of symbols before a longer pause. Defaults
+                to ``settings.rate_limit.yfinance_batch_size`` (10).
+            batch_pause: Additional pause after each batch. Defaults to
+                ``settings.rate_limit.yfinance_batch_pause`` (30s).
 
         Raises:
             LoaderError: If validation fails
-
-        Note:
-            YFinance has rate limits. Conservative defaults:
-            - 5s between stocks
-            - 30s pause every 10 stocks
-            - Recommended: max 10 stocks per session per day
         """
         if not isinstance(db, TimeSeriesDB):
             raise LoaderError("db must be a TimeSeriesDB instance")
+
+        rate_limit = get_settings().rate_limit
+        if delay_seconds is None:
+            delay_seconds = rate_limit.yfinance_delay_seconds
+        if batch_size is None:
+            batch_size = rate_limit.yfinance_batch_size
+        if batch_pause is None:
+            batch_pause = rate_limit.yfinance_batch_pause
 
         if delay_seconds < 0:
             raise LoaderError("delay_seconds must be non-negative")

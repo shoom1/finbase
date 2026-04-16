@@ -3,6 +3,7 @@
   "index_name": "S&P 500",
   "description": "S&P 500 Index - Large Cap US Equities",
   "country": "US",
+  "currency": "USD",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
