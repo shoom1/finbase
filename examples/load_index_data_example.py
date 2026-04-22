@@ -8,14 +8,16 @@ in a specific index (SP500, DOW30, NDX, FTSE100, DAX).
 from finbase.data.database import TimeSeriesDB
 from finbase.data.database.index_db import IndexDB
 from finbase.data.loaders import EquityLoader
+from finbase.utils.logging import configure_application_logging
 
 def load_dow30_example():
     """Load historical data for all DOW30 constituents."""
+    configure_application_logging()
 
     # Connect to database
     with TimeSeriesDB() as db:
         # Get DOW30 constituents
-        index_db = IndexDB(db)
+        index_db = IndexDB(db.conn)
         constituents_df = index_db.get_current_constituents('DOW30')
 
         print(f"DOW30 has {len(constituents_df)} constituents")

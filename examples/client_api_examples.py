@@ -5,6 +5,13 @@ This demonstrates how external projects can access FinBase without direct databa
 """
 
 from finbase.client import DataClient
+from finbase.utils.logging import configure_application_logging
+
+# Library modules only attach a NullHandler, so console output is silent
+# by default. Wire up the standard application config so INFO/WARNING
+# messages emitted by the library actually reach the terminal while this
+# example runs.
+configure_application_logging()
 
 # Initialize client (auto-finds database via ~/.finbaserc)
 client = DataClient()

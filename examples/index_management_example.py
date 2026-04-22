@@ -12,9 +12,11 @@ from finbase.data.database import TimeSeriesDB
 from finbase.data.database.index_db import IndexDB
 from finbase.data.index_updater import IndexUpdater
 from finbase.config import get_settings
+from finbase.utils.logging import configure_application_logging
 
 def main():
     """Main example function."""
+    configure_application_logging()
 
     print("=" * 80)
     print("Index Constituent Management - Example")

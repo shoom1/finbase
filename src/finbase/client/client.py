@@ -580,7 +580,7 @@ class DataClient:
             >>> sp500_2020 = client.get_index_constituents('SP500', as_of_date='2020-01-01')
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
 
             if as_of_date is None:
                 return index_db.get_current_constituents(index_code)
@@ -599,7 +599,7 @@ class DataClient:
             >>> print(indices[['index_code', 'index_name', 'last_updated']])
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.list_indices()
 
     def is_index_member(
@@ -625,7 +625,7 @@ class DataClient:
             >>> client.is_index_member('TSLA', 'SP500', date='2021-01-01')  # True
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.is_index_member(symbol, index_code, check_date=date)
 
     def get_index_changes(
@@ -652,5 +652,5 @@ class DataClient:
             >>> removals = changes[changes['change_type'] == 'removed']
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.get_index_changes(index_code, start_date, end_date)

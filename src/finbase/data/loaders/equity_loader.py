@@ -3,7 +3,7 @@
 import yfinance as yf
 import pandas as pd
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 from datetime import datetime
 
 from ..database.timeseries_db import TimeSeriesDB, DatabaseError, ValidationError
@@ -29,6 +29,7 @@ class EquityLoader:
         delay_seconds: Optional[float] = None,
         batch_size: Optional[int] = None,
         batch_pause: Optional[float] = None,
+        ticker_factory: Optional[Callable[[str], object]] = None,
     ):
         """
         Initialize equity loader with rate limiting.
@@ -46,6 +47,12 @@ class EquityLoader:
                 to ``settings.rate_limit.yfinance_batch_size`` (10).
             batch_pause: Additional pause after each batch. Defaults to
                 ``settings.rate_limit.yfinance_batch_pause`` (30s).
+            ticker_factory: Callable ``f(symbol) -> ticker`` returning an
+                object with a ``history(start, end, auto_adjust)`` method
+                (the yfinance ``Ticker`` contract). Defaults to
+                ``yfinance.Ticker`` but is injectable so tests and
+                alternate data sources don't need to monkeypatch globals.
+                Mirrors ``MarketCapEnricher.ticker_factory``.
 
         Raises:
             LoaderError: If validation fails
@@ -74,7 +81,19 @@ class EquityLoader:
         self.delay_seconds = delay_seconds
         self.batch_size = batch_size
         self.batch_pause = batch_pause
+        self._ticker_factory = ticker_factory
         self.request_count = 0
+
+    def _make_ticker(self, symbol: str):
+        """Resolve the ticker object for ``symbol``.
+
+        Read at call time (not constructor time) so tests that
+        monkeypatch ``equity_loader.yf`` after instance creation still
+        take effect — the historical contract this module exposes.
+        """
+        if self._ticker_factory is not None:
+            return self._ticker_factory(symbol)
+        return yf.Ticker(symbol)
 
     def _has_existing_data(self, symbol: str, data_source: str = 'yfinance') -> bool:
         """
@@ -175,7 +194,7 @@ class EquityLoader:
         last_error = None
         for attempt in range(max_retries):
             try:
-                ticker = yf.Ticker(symbol)
+                ticker = self._make_ticker(symbol)
                 df = ticker.history(start=start_date, end=end_date, auto_adjust=False)
                 self.request_count += 1
 

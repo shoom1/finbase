@@ -33,7 +33,9 @@ from finbase.config.user_config import initialize_user_space
 from finbase.config import get_settings
 from finbase.utils.logging import configure_application_logging, get_logger
 
-configure_application_logging()
+# Library-style import: only a NullHandler is attached at import time.
+# configure_application_logging() is called from main() so tests/importers
+# don't get surprise filesystem writes or re-configured root logger.
 logger = get_logger(__name__)
 
 
@@ -289,7 +291,7 @@ def load_index_constituents(
     print("=" * 60)
 
     # Get index info and constituents
-    index_db = IndexDB(db)
+    index_db = IndexDB(db.conn)
     constituents_df = index_db.get_current_constituents(index_code)
 
     if constituents_df.empty:
@@ -373,6 +375,8 @@ def load_index_constituents(
     print(f"  Errors: {error_count}")
     print(f"  Total: {loaded_count + skipped_count + error_count}/{len(symbols_to_load)}")
 
+    return error_count
+
 
 def update_index_constituents(db: TimeSeriesDB, index_code: str):
     """
@@ -387,7 +391,7 @@ def update_index_constituents(db: TimeSeriesDB, index_code: str):
     print(f"{'=' * 60}")
 
     try:
-        index_db = IndexDB(db)
+        index_db = IndexDB(db.conn)
         updater = IndexUpdater(index_db)
 
         summary = updater.update_from_wikipedia(index_code)
@@ -420,7 +424,7 @@ def update_all_indices(db: TimeSeriesDB):
     print(f"{'=' * 60}")
 
     try:
-        index_db = IndexDB(db)
+        index_db = IndexDB(db.conn)
         updater = IndexUpdater(index_db)
 
         results = updater.update_all_configured_indices()
@@ -445,7 +449,7 @@ def list_indices(db: TimeSeriesDB):
     print(f"{'=' * 60}")
 
     try:
-        index_db = IndexDB(db)
+        index_db = IndexDB(db.conn)
         indices_df = index_db.list_indices()
 
         if indices_df.empty:
@@ -474,6 +478,8 @@ def list_indices(db: TimeSeriesDB):
 
 
 def main():
+    configure_application_logging()
+
     parser = argparse.ArgumentParser(description="Setup time series database")
     parser.add_argument("--init", action="store_true", help="Initialize database schema")
     parser.add_argument("--setup-sp500", action="store_true", help="Setup S&P 500 group from Wikipedia")
@@ -506,6 +512,7 @@ def main():
         return
 
     db = None
+    exit_code = 0
 
     try:
         # Full setup
@@ -572,13 +579,18 @@ def main():
             if db is None:
                 db_path = args.db_path or get_settings().database.path
                 db = TimeSeriesDB(db_path)
-            load_index_constituents(
+            error_count = load_index_constituents(
                 db,
                 args.load_index_data.upper(),
                 start_date=args.index_start_date,
                 max_symbols=args.index_max_symbols,
                 skip_existing=skip_existing
             )
+            # A non-zero error_count means at least one symbol failed to load.
+            # Surface that to CI / shell by exiting non-zero, so upstream
+            # automation doesn't treat a partial failure as a success.
+            if error_count:
+                exit_code = 1
 
         print("\n" + "=" * 60)
         print("✓ Setup Complete!")
@@ -587,6 +599,9 @@ def main():
     finally:
         if db is not None:
             db.close()
+
+    if exit_code:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

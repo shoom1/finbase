@@ -15,10 +15,12 @@ entry point that works for every shipped index config.
 from pathlib import Path
 
 from finbase.data.parsers.wikipedia_index_parser import WikipediaIndexParser
+from finbase.utils.logging import configure_application_logging
 
 
 def main():
     """Main example function."""
+    configure_application_logging()
 
     print("=" * 80)
     print("S&P 500 Wikipedia Parser - Example")

@@ -340,6 +340,14 @@ class TestGetRiskFactorInfo:
 
         assert info is None
 
+    def test_sqlite_error_is_wrapped_in_database_error(self, test_db):
+        """Closing the connection mid-flight must surface as DatabaseError,
+        matching every other read path on TimeSeriesDB. Before this was
+        the only query method on the class that let sqlite3.Error leak."""
+        test_db.conn.close()
+        with pytest.raises(DatabaseError, match="Failed to get risk factor info"):
+            test_db.get_risk_factor_info('AAPL', 'yfinance')
+
 
 class TestListRiskFactors:
     """Test list_risk_factors method."""

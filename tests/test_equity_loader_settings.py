@@ -19,8 +19,14 @@ from finbase.data.loaders.equity_loader import EquityLoader
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings_cache():
-    """Reset the cached global settings before and after each test."""
+def _reset_settings_cache(monkeypatch, tmp_path):
+    """Reset the cached global settings before and after each test.
+
+    Also redirects HOME to a temp directory so the dev's real
+    ``~/.finbaserc`` can't bleed its ``rate_limit`` values (or any future
+    fields) into these assertions.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
     get_settings(reload=True)
     yield
     # Clean up any env-var pollution and rehydrate cache

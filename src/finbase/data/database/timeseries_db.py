@@ -481,20 +481,27 @@ class TimeSeriesDB:
             raise DatabaseError(f"Unexpected error querying data: {e}")
 
     def get_risk_factor_info(self, symbol: str, data_source: str = 'yfinance') -> Optional[Dict]:
-        """Get metadata for a risk factor."""
-        cursor = self.conn.cursor()
+        """Get metadata for a risk factor.
 
-        cursor.execute(
-            """
-            SELECT *
-            FROM risk_factors
-            WHERE symbol = ?
-            AND data_source = ?
-            """,
-            (symbol, data_source)
-        )
+        Returns None if the symbol+data_source pair is not present.
+        Raises DatabaseError on any sqlite failure so callers see the same
+        exception type as every other read path on this class.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT *
+                FROM risk_factors
+                WHERE symbol = ?
+                AND data_source = ?
+                """,
+                (symbol, data_source)
+            )
+            row = cursor.fetchone()
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get risk factor info for {symbol}: {e}")
 
-        row = cursor.fetchone()
         if not row:
             return None
 
