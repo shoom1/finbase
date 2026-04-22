@@ -7,9 +7,11 @@
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/FTSE_100_Index",
+  "symbol_suffix": ".L",
 
   "constituents_table": {
     "table_index": 6,
+    "match_columns": ["Ticker", "Company"],
     "column_mapping": {
       "Company": "company_name",
       "Ticker": "symbol",

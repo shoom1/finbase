@@ -151,6 +151,109 @@ class WikipediaIndexParser:
         except Exception as e:
             raise WikipediaIndexParserError(f"Failed to parse HTML tables for {self.index_code}: {e}")
 
+    def _table_matches_columns(
+        self, df: pd.DataFrame, required_columns: List[str]
+    ) -> bool:
+        """Check if `df`'s header is a superset of `required_columns`.
+
+        Column names are stringified because pd.read_html sometimes returns
+        integer/tuple headers (multi-index tables). Exact name match is
+        required — Wikipedia column headers are stable enough that fuzzy
+        matching would cost more than it'd save.
+        """
+        actual = {str(c) for c in df.columns}
+        return set(required_columns).issubset(actual)
+
+    def _resolve_table_index(
+        self,
+        table_config: Dict,
+        *,
+        strict: bool = True,
+    ) -> Optional[int]:
+        """Return the index into ``self._tables`` that should be used.
+
+        Honors ``match_columns`` as a structural fallback for cases where
+        ``pd.read_html`` returns an unexpected table order — the classic
+        culprit is Wikipedia's fundraising banner, which inserts a
+        one-off table at the top of the page and shifts every subsequent
+        ``table_index`` by one.
+
+        Strategy:
+          1. If no ``match_columns`` key is set, return the configured
+             ``table_index`` blindly (legacy behavior; raises
+             out-of-range when ``strict=True``).
+          2. Otherwise, verify the configured index still points at a
+             table containing every ``match_columns`` entry; if it does,
+             use it.
+          3. If not, scan all tables and return the first one whose
+             header is a superset of ``match_columns``. A WARNING is
+             logged so the drift doesn't go unnoticed — the config
+             should be updated the next time someone touches it.
+
+        ``strict=False`` turns the "no table matches" failure into a
+        ``None`` return, which is what ``get_changes()`` wants: missing
+        changes table is a soft miss, not a hard error.
+        """
+        configured = table_config['table_index']
+        match_cols = table_config.get('match_columns')
+        total = len(self._tables)
+
+        if not match_cols:
+            if configured >= total:
+                if strict:
+                    raise WikipediaIndexParserError(
+                        f"Table index {configured} out of range. "
+                        f"Found {total} tables."
+                    )
+                return None
+            return configured
+
+        # Verify configured index is still correct.
+        if configured < total and self._table_matches_columns(
+            self._tables[configured], match_cols
+        ):
+            return configured
+
+        # Scan — first table whose header covers match_columns wins.
+        for i, tbl in enumerate(self._tables):
+            if self._table_matches_columns(tbl, match_cols):
+                logger.warning(
+                    f"{self.index_code}: configured table_index "
+                    f"{configured} does not match expected columns "
+                    f"{match_cols}; falling back to table_index {i}. "
+                    f"Likely a Wikipedia banner shift — update the "
+                    f"config when convenient."
+                )
+                return i
+
+        if strict:
+            raise WikipediaIndexParserError(
+                f"No table matches expected columns {match_cols} for "
+                f"{self.index_code}. Found {total} tables."
+            )
+        return None
+
+    def _apply_symbol_suffix(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Append ``config['symbol_suffix']`` to every symbol that
+        doesn't already end with it.
+
+        Purpose: Wikipedia tables list bare tickers (``AAL``, ``AZN``),
+        but YFinance disambiguates exchanges by suffix (``AAL.L`` =
+        Anglo American on LSE, ``AAL`` = American Airlines on NASDAQ).
+        Storing the suffixed form in FinBase prevents silent
+        mis-mapping when external code queries by symbol.
+
+        Idempotent: running twice is a no-op because the second pass
+        sees every row already suffixed. Empty/missing ``symbol_suffix``
+        is a no-op too, which is what SP500/NDX/DOW30 rely on.
+        """
+        suffix = self.config.get('symbol_suffix')
+        if not suffix:
+            return df
+        already = df['symbol'].str.endswith(suffix, na=False)
+        df.loc[~already, 'symbol'] = df.loc[~already, 'symbol'] + suffix
+        return df
+
     def get_constituents(self) -> pd.DataFrame:
         """
         Extract current constituents using config mapping.
@@ -169,14 +272,8 @@ class WikipediaIndexParser:
             if not table_config:
                 raise WikipediaIndexParserError(f"No constituents_table config for {self.index_code}")
 
-            table_index = table_config['table_index']
             column_mapping = table_config['column_mapping']
-
-            # Get the table
-            if table_index >= len(self._tables):
-                raise WikipediaIndexParserError(
-                    f"Table index {table_index} out of range. Found {len(self._tables)} tables."
-                )
+            table_index = self._resolve_table_index(table_config, strict=True)
 
             constituents = self._tables[table_index].copy()
             logger.info(f"Extracted table {table_index} with {len(constituents)} rows")
@@ -195,6 +292,11 @@ class WikipediaIndexParser:
 
             # Clean symbol column
             constituents['symbol'] = constituents['symbol'].str.strip().str.upper()
+
+            # Apply per-index exchange suffix (AAL -> AAL.L for FTSE100).
+            # Runs after strip+upper so whitespace/case variation in the
+            # raw cells can't defeat the idempotency check.
+            constituents = self._apply_symbol_suffix(constituents)
 
             # Clean company_name if present
             if 'company_name' in constituents.columns:
@@ -215,6 +317,8 @@ class WikipediaIndexParser:
             logger.info(f"Extracted {len(constituents)} constituents for {self.index_code}")
             return constituents
 
+        except WikipediaIndexParserError:
+            raise
         except Exception as e:
             raise WikipediaIndexParserError(f"Failed to extract constituents for {self.index_code}: {e}")
 
@@ -237,13 +341,16 @@ class WikipediaIndexParser:
                 logger.info(f"No changes_table config for {self.index_code}, skipping")
                 return None
 
-            table_index = table_config['table_index']
             column_mapping = table_config['column_mapping']
             has_multiindex = table_config.get('has_multiindex_columns', False)
 
-            # Get the table
-            if table_index >= len(self._tables):
-                logger.warning(f"Changes table index {table_index} out of range, skipping")
+            # Soft-fail on missing/mismatched changes table — this is an
+            # optional data product, callers already handle None.
+            table_index = self._resolve_table_index(table_config, strict=False)
+            if table_index is None:
+                logger.warning(
+                    f"Changes table not found for {self.index_code}, skipping"
+                )
                 return None
 
             changes = self._tables[table_index].copy()

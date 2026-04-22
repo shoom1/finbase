@@ -10,6 +10,7 @@
 
   "constituents_table": {
     "table_index": 0,
+    "match_columns": ["Symbol", "Security", "GICS Sector"],
     "column_mapping": {
       "Symbol": "symbol",
       "Security": "company_name",

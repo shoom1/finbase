@@ -10,6 +10,7 @@
 
   "constituents_table": {
     "table_index": 4,
+    "match_columns": ["Ticker", "Company"],
     "column_mapping": {
       "Ticker": "symbol",
       "Company": "company_name",
