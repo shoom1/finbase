@@ -8,20 +8,15 @@ Shows how to:
 4. Check membership
 """
 
-import sys
-from pathlib import Path
-
-# Add src to path
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
-
-from data.database import TimeSeriesDB
-from data.database.index_db import IndexDB
-from data.index_updater import IndexUpdater
-from config import get_settings
+from finbase.data.database import TimeSeriesDB
+from finbase.data.database.index_db import IndexDB
+from finbase.data.index_updater import IndexUpdater
+from finbase.config import get_settings
+from finbase.utils.logging import configure_application_logging
 
 def main():
     """Main example function."""
+    configure_application_logging()
 
     print("=" * 80)
     print("Index Constituent Management - Example")
@@ -121,7 +116,7 @@ def main():
     print("Example 5: Using DataClient API")
     print("=" * 80)
 
-    from client import DataClient
+    from finbase.client import DataClient
 
     client = DataClient()
 

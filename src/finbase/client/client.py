@@ -7,6 +7,7 @@ Provides simple, intuitive interface for querying financial data.
 import pandas as pd
 from typing import List, Optional, Union, Dict, Tuple
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 from ..data.database import TimeSeriesDB, DatabaseError
 from ..data.database.index_db import IndexDB
@@ -59,11 +60,38 @@ class DataClient:
                      (which reads from ~/.finbaserc)
         """
         self.db_path = db_path or get_settings().database.path
+        self._db: Optional[TimeSeriesDB] = None
         logger.debug(f"DataClient initialized with database: {self.db_path}")
 
-    def _get_db(self) -> TimeSeriesDB:
-        """Get database connection (auto-managed)."""
-        return TimeSeriesDB(self.db_path)
+    def __enter__(self):
+        """Open a persistent database connection."""
+        self._db = TimeSeriesDB(self.db_path)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Close the persistent database connection."""
+        if self._db is not None:
+            self._db.close()
+            self._db = None
+        return False
+
+    @contextmanager
+    def _get_db(self):
+        """
+        Get database connection as a context manager.
+
+        If DataClient is used as a context manager, reuses the persistent
+        connection (does not close it on exit).
+        Otherwise, creates a temporary connection and closes it on exit.
+        """
+        if self._db is not None:
+            yield self._db
+        else:
+            db = TimeSeriesDB(self.db_path)
+            try:
+                yield db
+            finally:
+                db.close()
 
     def get_data(
         self,
@@ -311,9 +339,10 @@ class DataClient:
 
         # Apply pattern filter if specified
         if pattern and not df.empty:
-            # Convert SQL wildcard to regex
-            regex_pattern = pattern.replace('*', '.*').replace('%', '.*')
-            df = df[df['symbol'].str.match(f'^{regex_pattern}$', case=False)]
+            import fnmatch
+            glob_pattern = pattern.replace('%', '*').replace('_', '?')
+            mask = df['symbol'].apply(lambda s: fnmatch.fnmatch(s.upper(), glob_pattern.upper()))
+            df = df[mask]
 
         return df
 
@@ -551,7 +580,7 @@ class DataClient:
             >>> sp500_2020 = client.get_index_constituents('SP500', as_of_date='2020-01-01')
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
 
             if as_of_date is None:
                 return index_db.get_current_constituents(index_code)
@@ -570,7 +599,7 @@ class DataClient:
             >>> print(indices[['index_code', 'index_name', 'last_updated']])
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.list_indices()
 
     def is_index_member(
@@ -596,7 +625,7 @@ class DataClient:
             >>> client.is_index_member('TSLA', 'SP500', date='2021-01-01')  # True
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.is_index_member(symbol, index_code, check_date=date)
 
     def get_index_changes(
@@ -623,5 +652,5 @@ class DataClient:
             >>> removals = changes[changes['change_type'] == 'removed']
         """
         with self._get_db() as db:
-            index_db = IndexDB(db)
+            index_db = IndexDB(db.conn)
             return index_db.get_index_changes(index_code, start_date, end_date)

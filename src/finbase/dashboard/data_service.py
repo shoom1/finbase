@@ -8,7 +8,6 @@ import pandas as pd
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
-import sqlite3
 
 from ..data.database import TimeSeriesDB
 from ..config import get_settings
@@ -94,18 +93,9 @@ class DashboardDataService:
             db_path_obj = Path(self.db_path)
             db_size_mb = db_path_obj.stat().st_size / (1024 * 1024) if db_path_obj.exists() else 0
 
-            # Count total data points
-            cursor = db.conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM timeseries_data")
-            total_data_points = cursor.fetchone()[0]
-
-            # Get date range
-            cursor.execute("SELECT MIN(date), MAX(date) FROM timeseries_data")
-            min_date, max_date = cursor.fetchone()
-
-            # Get last updated
-            cursor.execute("SELECT MAX(last_updated) FROM risk_factors")
-            last_updated = cursor.fetchone()[0]
+            total_data_points = db.count_timeseries_rows()
+            min_date, max_date = db.get_timeseries_date_bounds()
+            last_updated = db.get_latest_update_timestamp()
 
             stats = {
                 'total_symbols': len(risk_factors),
@@ -138,27 +128,7 @@ class DashboardDataService:
         logger.info("Computing data coverage")
 
         with TimeSeriesDB(self.db_path) as db:
-            cursor = db.conn.cursor()
-
-            # Get coverage data for each symbol
-            query = """
-                SELECT
-                    rf.symbol,
-                    rf.asset_class,
-                    rf.sector,
-                    rf.start_date,
-                    rf.end_date,
-                    COUNT(td.ts_id) as data_points,
-                    MIN(td.date) as actual_start,
-                    MAX(td.date) as actual_end
-                FROM risk_factors rf
-                LEFT JOIN timeseries_data td ON rf.risk_factor_id = td.risk_factor_id
-                WHERE rf.is_active = 1
-                GROUP BY rf.risk_factor_id, rf.symbol, rf.asset_class, rf.sector, rf.start_date, rf.end_date
-                ORDER BY rf.asset_class, rf.symbol
-            """
-
-            df = pd.read_sql_query(query, db.conn)
+            df = db.get_coverage_summary()
 
             if not df.empty:
                 # Calculate coverage percentage

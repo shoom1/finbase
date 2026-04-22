@@ -9,6 +9,7 @@ import tempfile
 import shutil
 
 from finbase.data.database import TimeSeriesDB
+from finbase.data.database.index_db import IndexDB
 
 
 @pytest.fixture
@@ -136,3 +137,38 @@ def multiple_symbols_db(test_db):
         test_db.add_timeseries_data(rf_id, data)
 
     return test_db
+
+
+@pytest.fixture
+def index_db(test_db):
+    """IndexDB instance backed by a test database with schema initialized."""
+    return IndexDB(test_db)
+
+
+@pytest.fixture
+def sample_constituents_df():
+    """Sample constituents DataFrame matching WikipediaIndexParser output."""
+    return pd.DataFrame({
+        'symbol': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META'],
+        'company_name': ['Apple Inc.', 'Microsoft Corp.', 'Alphabet Inc.', 'Amazon.com Inc.', 'Meta Platforms Inc.'],
+        'sector': ['Technology', 'Technology', 'Communication Services', 'Consumer Discretionary', 'Communication Services'],
+        'sub_industry': ['Tech Hardware', 'Software', 'Interactive Media', 'Broadline Retail', 'Interactive Media'],
+        'source': ['wikipedia'] * 5,
+    })
+
+
+@pytest.fixture
+def populated_index_db(index_db, sample_constituents_df):
+    """IndexDB with a registered SP500 index and 5 constituents."""
+    index_db.register_index(
+        index_code='SP500',
+        index_name='S&P 500',
+        description='Standard and Poors 500',
+        country='US',
+        data_source='wikipedia',
+    )
+    index_db.update_constituents(
+        index_code='SP500',
+        constituents_df=sample_constituents_df,
+    )
+    return index_db

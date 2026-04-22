@@ -292,11 +292,21 @@ class TestQuery:
 
     def test_query_invalid_date_format(self, populated_db, sample_risk_factor_data):
         """Test validation for invalid date format."""
-        with pytest.raises(ValidationError, match="Invalid date format"):
+        with pytest.raises(ValidationError, match="Invalid start_date format"):
             populated_db.query(
                 symbols=[sample_risk_factor_data['symbol']],
                 start_date='not-a-date',  # Invalid date
                 end_date='2024-01-31',
+                data_source=sample_risk_factor_data['data_source']
+            )
+
+    def test_query_invalid_end_date_format(self, populated_db, sample_risk_factor_data):
+        """Symmetric check for the end_date validation message."""
+        with pytest.raises(ValidationError, match="Invalid end_date format"):
+            populated_db.query(
+                symbols=[sample_risk_factor_data['symbol']],
+                start_date='2024-01-01',
+                end_date='not-a-date',
                 data_source=sample_risk_factor_data['data_source']
             )
 
@@ -330,6 +340,14 @@ class TestGetRiskFactorInfo:
 
         assert info is None
 
+    def test_sqlite_error_is_wrapped_in_database_error(self, test_db):
+        """Closing the connection mid-flight must surface as DatabaseError,
+        matching every other read path on TimeSeriesDB. Before this was
+        the only query method on the class that let sqlite3.Error leak."""
+        test_db.conn.close()
+        with pytest.raises(DatabaseError, match="Failed to get risk factor info"):
+            test_db.get_risk_factor_info('AAPL', 'yfinance')
+
 
 class TestListRiskFactors:
     """Test list_risk_factors method."""
@@ -355,6 +373,104 @@ class TestListRiskFactors:
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 2  # AAPL and MSFT
+
+
+class TestCountTimeseriesRows:
+    """Test count_timeseries_rows method."""
+
+    def test_empty_db_returns_zero(self, test_db):
+        """Empty database returns 0 rows."""
+        assert test_db.count_timeseries_rows() == 0
+
+    def test_populated_db_returns_actual_count(self, populated_db, sample_ohlcv_data):
+        """Populated database returns the actual row count from timeseries_data."""
+        assert populated_db.count_timeseries_rows() == len(sample_ohlcv_data)
+
+    def test_multiple_symbols_sums_all_rows(self, multiple_symbols_db):
+        """Count covers all symbols, not just one."""
+        # multiple_symbols_db loads 3 symbols, each with the same business-day range
+        expected_rows_per_symbol = len(
+            pd.date_range(start='2024-01-01', end='2024-01-31', freq='B')
+        )
+        assert multiple_symbols_db.count_timeseries_rows() == 3 * expected_rows_per_symbol
+
+
+class TestGetTimeseriesDateBounds:
+    """Test get_timeseries_date_bounds method."""
+
+    def test_empty_db_returns_none_tuple(self, test_db):
+        """Empty database returns (None, None)."""
+        assert test_db.get_timeseries_date_bounds() == (None, None)
+
+    def test_populated_db_returns_actual_bounds(self, populated_db, sample_ohlcv_data):
+        """Populated database returns min/max dates matching inserted data."""
+        min_date, max_date = populated_db.get_timeseries_date_bounds()
+        expected_min = sample_ohlcv_data['date'].min().strftime('%Y-%m-%d')
+        expected_max = sample_ohlcv_data['date'].max().strftime('%Y-%m-%d')
+        assert min_date == expected_min
+        assert max_date == expected_max
+
+
+class TestGetLatestUpdateTimestamp:
+    """Test get_latest_update_timestamp method."""
+
+    def test_empty_db_returns_none(self, test_db):
+        """Empty database returns None."""
+        assert test_db.get_latest_update_timestamp() is None
+
+    def test_populated_db_returns_timestamp(self, populated_db):
+        """Populated database returns a non-None timestamp string."""
+        ts = populated_db.get_latest_update_timestamp()
+        assert ts is not None
+        # Should parse as a datetime
+        parsed = pd.to_datetime(ts)
+        assert parsed is not pd.NaT
+
+
+class TestGetCoverageSummary:
+    """Test get_coverage_summary method."""
+
+    def test_empty_db_returns_empty_dataframe(self, test_db):
+        """Empty database returns an empty DataFrame (with expected columns)."""
+        df = test_db.get_coverage_summary()
+        assert isinstance(df, pd.DataFrame)
+        assert df.empty
+
+    def test_populated_db_has_expected_columns(self, multiple_symbols_db):
+        """Coverage summary has the columns the dashboard expects."""
+        df = multiple_symbols_db.get_coverage_summary()
+        expected = {
+            'symbol', 'asset_class', 'sector',
+            'start_date', 'end_date',
+            'data_points', 'actual_start', 'actual_end',
+        }
+        assert expected.issubset(set(df.columns))
+
+    def test_populated_db_one_row_per_symbol(self, multiple_symbols_db):
+        """Each active symbol produces exactly one row (GROUP BY risk_factor_id)."""
+        df = multiple_symbols_db.get_coverage_summary()
+        assert len(df) == 3
+        assert set(df['symbol']) == {'AAPL', 'MSFT', 'JPM'}
+
+    def test_populated_db_data_points_nonzero(self, multiple_symbols_db):
+        """data_points reflects the LEFT JOIN count, not zero."""
+        df = multiple_symbols_db.get_coverage_summary()
+        assert (df['data_points'] > 0).all()
+
+    def test_inactive_risk_factors_excluded(self, test_db, sample_risk_factor_data, sample_ohlcv_data):
+        """Soft-deleted (is_active=0) risk factors are not returned."""
+        rf_id = test_db.add_risk_factor(**sample_risk_factor_data)
+        test_db.add_timeseries_data(rf_id, sample_ohlcv_data)
+
+        # Soft delete
+        test_db.conn.execute(
+            "UPDATE risk_factors SET is_active = 0 WHERE risk_factor_id = ?",
+            (rf_id,),
+        )
+        test_db.conn.commit()
+
+        df = test_db.get_coverage_summary()
+        assert df.empty
 
 
 class TestBulkInsertion:

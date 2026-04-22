@@ -3,9 +3,9 @@ include README.md
 include LICENSE
 include CLAUDE.md
 include CHANGELOG.md
-include QUICK_START_INDEX_DATA.md
-include QUICKSTART_*.md
-include DASHBOARD.md
+include docs/QUICK_START_INDEX_DATA.md
+include docs/QUICKSTART_*.md
+include docs/DASHBOARD.md
 
 # Include configuration files
 include environment.yml
@@ -14,7 +14,7 @@ include pyproject.toml
 
 # Include data files
 recursive-include data *.json
-recursive-include data/index_configs *.json
+recursive-include src/finbase/index_configs *.json
 
 # Exclude compiled Python files
 global-exclude __pycache__

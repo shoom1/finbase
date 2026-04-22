@@ -43,14 +43,28 @@ class IndexDB:
     - Change detection and history
     """
 
-    def __init__(self, db: TimeSeriesDB):
+    def __init__(self, db):
         """
-        Initialize IndexDB with TimeSeriesDB instance.
+        Initialize IndexDB with a database handle.
+
+        Accepts either a raw ``sqlite3.Connection`` (preferred) or a
+        :class:`TimeSeriesDB` instance, from which the connection is
+        extracted. Accepting the richer type kept all historical callers
+        working while letting new code pass only what this class actually
+        needs — a connection. The internal methods always use
+        ``self.conn`` so TimeSeriesDB's private attribute is no longer
+        load-bearing for index operations.
 
         Args:
-            db: TimeSeriesDB instance for database access
+            db: ``sqlite3.Connection`` or ``TimeSeriesDB`` instance.
         """
-        self.db = db
+        if isinstance(db, sqlite3.Connection):
+            self.conn = db
+        else:
+            # Assume a TimeSeriesDB-shaped object exposing ``.conn``.
+            # Avoids an isinstance check against TimeSeriesDB to keep
+            # IndexDB decoupled from that class at runtime.
+            self.conn = db.conn
 
     def register_index(
         self,
@@ -79,7 +93,7 @@ class IndexDB:
             DatabaseError: If registration fails
         """
         try:
-            cursor = self.db.conn.cursor()
+            cursor = self.conn.cursor()
 
             # Check if exists
             cursor.execute(
@@ -109,11 +123,11 @@ class IndexDB:
                 index_id = cursor.lastrowid
                 logger.info(f"Registered new index {index_code} (id={index_id})")
 
-            self.db.conn.commit()
+            self.conn.commit()
             return index_id
 
         except sqlite3.Error as e:
-            self.db.conn.rollback()
+            self.conn.rollback()
             raise DatabaseError(f"Failed to register index {index_code}: {e}")
 
     def get_index_id(self, index_code: str) -> Optional[int]:
@@ -127,7 +141,7 @@ class IndexDB:
             index_id or None if not found
         """
         try:
-            cursor = self.db.conn.cursor()
+            cursor = self.conn.cursor()
             cursor.execute(
                 "SELECT index_id FROM indices WHERE index_code = ?",
                 (index_code,)
@@ -163,7 +177,7 @@ class IndexDB:
                 WHERE i.index_code = ? AND c.end_date IS NULL
                 ORDER BY c.symbol
             """
-            df = pd.read_sql_query(query, self.db.conn, params=(index_code,))
+            df = pd.read_sql_query(query, self.conn, params=(index_code,))
 
             # Parse dates
             if 'date_added_to_index' in df.columns:
@@ -205,7 +219,7 @@ class IndexDB:
                   AND (c.end_date IS NULL OR c.end_date > ?)
                 ORDER BY c.symbol
             """
-            df = pd.read_sql_query(query, self.db.conn, params=(index_code, as_of_date, as_of_date))
+            df = pd.read_sql_query(query, self.conn, params=(index_code, as_of_date, as_of_date))
 
             # Parse dates
             for col in ['date_added_to_index', 'effective_date', 'end_date']:
@@ -271,7 +285,7 @@ class IndexDB:
         unchanged_symbols = current_symbols & new_symbols
 
         try:
-            cursor = self.db.conn.cursor()
+            cursor = self.conn.cursor()
 
             # Close out removed constituents
             if removed_symbols:
@@ -315,10 +329,10 @@ class IndexDB:
                 (datetime.now(), index_id)
             )
 
-            self.db.conn.commit()
+            self.conn.commit()
 
         except sqlite3.Error as e:
-            self.db.conn.rollback()
+            self.conn.rollback()
             raise DatabaseError(f"Failed to update constituents for {index_code}: {e}")
 
         return {
@@ -350,7 +364,7 @@ class IndexDB:
                 FROM indices
                 ORDER BY index_code
             """
-            df = pd.read_sql_query(query, self.db.conn)
+            df = pd.read_sql_query(query, self.conn)
 
             # Parse timestamps
             for col in ['created_at', 'last_updated']:
@@ -382,7 +396,7 @@ class IndexDB:
             check_date = date.today().isoformat()
 
         try:
-            cursor = self.db.conn.cursor()
+            cursor = self.conn.cursor()
             cursor.execute("""
                 SELECT COUNT(*)
                 FROM index_constituents c
@@ -460,7 +474,7 @@ class IndexDB:
             query = f"{query_added} UNION ALL {query_removed} ORDER BY date DESC"
             params = params_added + params_removed
 
-            df = pd.read_sql_query(query, self.db.conn, params=params)
+            df = pd.read_sql_query(query, self.conn, params=params)
 
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'], errors='coerce')

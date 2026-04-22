@@ -3,12 +3,14 @@
   "index_name": "S&P 500",
   "description": "S&P 500 Index - Large Cap US Equities",
   "country": "US",
+  "currency": "USD",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
 
   "constituents_table": {
     "table_index": 0,
+    "match_columns": ["Symbol", "Security", "GICS Sector"],
     "column_mapping": {
       "Symbol": "symbol",
       "Security": "company_name",

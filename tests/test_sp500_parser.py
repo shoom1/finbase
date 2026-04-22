@@ -1,7 +1,12 @@
 """
 Tests for S&P 500 Wikipedia parser.
+
+The class is now a deprecated wrapper around `WikipediaIndexParser`. These
+tests pin the back-compat surface so future migrations don't silently
+break callers that still import `SP500WikipediaParser`.
 """
 
+import warnings
 import pytest
 import pandas as pd
 from datetime import datetime
@@ -10,6 +15,10 @@ import sys
 from pathlib import Path
 
 from finbase.data.parsers.sp500_wikipedia import SP500WikipediaParser, SP500ParserError
+
+# These tests intentionally instantiate the deprecated class — silence the
+# warnings so the suite output stays focused on real failures.
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
 class TestSP500WikipediaParser:
@@ -92,7 +101,7 @@ class TestSP500WikipediaParser:
         parser = SP500WikipediaParser(url=custom_url)
         assert parser.url == custom_url
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_fetch_page_success(self, mock_get, parser, mock_html):
         """Test successful page fetch."""
         mock_response = Mock()
@@ -106,15 +115,17 @@ class TestSP500WikipediaParser:
         assert parser._html_content == mock_html
         mock_get.assert_called_once()
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_fetch_page_failure(self, mock_get, parser):
         """Test page fetch failure."""
-        mock_get.side_effect = Exception("Network error")
+        import requests as _requests
+
+        mock_get.side_effect = _requests.RequestException("Network error")
 
         with pytest.raises(SP500ParserError, match="Failed to fetch Wikipedia page"):
             parser.fetch_page()
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_get_current_constituents(self, mock_get, parser, mock_html):
         """Test extracting current constituents."""
         mock_response = Mock()
@@ -143,7 +154,7 @@ class TestSP500WikipediaParser:
         assert 'source' in constituents.columns
         assert all(constituents['source'] == 'wikipedia')
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_get_historical_changes(self, mock_get, parser, mock_html):
         """Test extracting historical changes."""
         mock_response = Mock()
@@ -164,7 +175,7 @@ class TestSP500WikipediaParser:
         assert 'source' in changes.columns
         assert all(changes['source'] == 'wikipedia')
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_get_all_data(self, mock_get, parser, mock_html):
         """Test getting both constituents and changes."""
         mock_response = Mock()
@@ -182,7 +193,7 @@ class TestSP500WikipediaParser:
         assert len(constituents) > 0
         assert len(changes) > 0
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_export_to_csv(self, mock_get, parser, mock_html, tmp_path):
         """Test CSV export."""
         mock_response = Mock()
@@ -208,7 +219,7 @@ class TestSP500WikipediaParser:
         assert len(constituents_read) > 0
         assert len(changes_read) > 0
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_export_to_json(self, mock_get, parser, mock_html, tmp_path):
         """Test JSON export."""
         mock_response = Mock()
@@ -234,7 +245,7 @@ class TestSP500WikipediaParser:
         assert len(constituents_read) > 0
         assert len(changes_read) > 0
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_get_summary_stats(self, mock_get, parser, mock_html):
         """Test summary statistics."""
         mock_response = Mock()
@@ -266,7 +277,7 @@ class TestSP500WikipediaParser:
         with pytest.raises(SP500ParserError):
             parser._parse_tables()
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_date_parsing(self, mock_get, parser, mock_html):
         """Test that dates are parsed correctly."""
         mock_response = Mock()
@@ -280,7 +291,7 @@ class TestSP500WikipediaParser:
             # Check dates are datetime type
             assert pd.api.types.is_datetime64_any_dtype(constituents['date_added'])
 
-    @patch('finbase.data.parsers.sp500_wikipedia.requests.get')
+    @patch('finbase.data.parsers.wikipedia_index_parser.requests.get')
     def test_symbol_cleaning(self, mock_get, parser, mock_html):
         """Test that symbols are cleaned (uppercase, trimmed)."""
         mock_response = Mock()

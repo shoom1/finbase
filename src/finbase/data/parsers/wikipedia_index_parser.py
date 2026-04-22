@@ -9,6 +9,7 @@ Dow 30, NASDAQ-100, etc.) without code changes.
 import pandas as pd
 import requests
 import json
+import os
 from typing import Dict, Optional, List
 from pathlib import Path
 from datetime import datetime
@@ -64,22 +65,25 @@ class WikipediaIndexParser:
         Raises:
             WikipediaIndexParserError: If config file not found
         """
-        # Find config file
-        config_path = Path(__file__).parent.parent.parent.parent / "data" / "index_configs" / f"{index_code.lower()}.json"
+        from importlib.resources import files
 
-        if not config_path.exists():
+        config_dir = files("finbase.index_configs")
+        config_file = config_dir / f"{index_code.lower()}.json"
+
+        try:
+            config_text = config_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
             raise WikipediaIndexParserError(
-                f"Config file not found for {index_code} at {config_path}. "
-                f"Available configs should be in data/index_configs/"
+                f"Config file not found for {index_code}. "
+                f"Expected: {index_code.lower()}.json in finbase/index_configs/"
             )
 
         try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            logger.info(f"Loaded config for {index_code} from {config_path}")
+            config = json.loads(config_text)
+            logger.info(f"Loaded config for {index_code}")
             return cls(config)
         except json.JSONDecodeError as e:
-            raise WikipediaIndexParserError(f"Invalid JSON in config file {config_path}: {e}")
+            raise WikipediaIndexParserError(f"Invalid JSON in config for {index_code}: {e}")
 
     @classmethod
     def from_config_file(cls, config_path: str):
@@ -147,6 +151,109 @@ class WikipediaIndexParser:
         except Exception as e:
             raise WikipediaIndexParserError(f"Failed to parse HTML tables for {self.index_code}: {e}")
 
+    def _table_matches_columns(
+        self, df: pd.DataFrame, required_columns: List[str]
+    ) -> bool:
+        """Check if `df`'s header is a superset of `required_columns`.
+
+        Column names are stringified because pd.read_html sometimes returns
+        integer/tuple headers (multi-index tables). Exact name match is
+        required — Wikipedia column headers are stable enough that fuzzy
+        matching would cost more than it'd save.
+        """
+        actual = {str(c) for c in df.columns}
+        return set(required_columns).issubset(actual)
+
+    def _resolve_table_index(
+        self,
+        table_config: Dict,
+        *,
+        strict: bool = True,
+    ) -> Optional[int]:
+        """Return the index into ``self._tables`` that should be used.
+
+        Honors ``match_columns`` as a structural fallback for cases where
+        ``pd.read_html`` returns an unexpected table order — the classic
+        culprit is Wikipedia's fundraising banner, which inserts a
+        one-off table at the top of the page and shifts every subsequent
+        ``table_index`` by one.
+
+        Strategy:
+          1. If no ``match_columns`` key is set, return the configured
+             ``table_index`` blindly (legacy behavior; raises
+             out-of-range when ``strict=True``).
+          2. Otherwise, verify the configured index still points at a
+             table containing every ``match_columns`` entry; if it does,
+             use it.
+          3. If not, scan all tables and return the first one whose
+             header is a superset of ``match_columns``. A WARNING is
+             logged so the drift doesn't go unnoticed — the config
+             should be updated the next time someone touches it.
+
+        ``strict=False`` turns the "no table matches" failure into a
+        ``None`` return, which is what ``get_changes()`` wants: missing
+        changes table is a soft miss, not a hard error.
+        """
+        configured = table_config['table_index']
+        match_cols = table_config.get('match_columns')
+        total = len(self._tables)
+
+        if not match_cols:
+            if configured >= total:
+                if strict:
+                    raise WikipediaIndexParserError(
+                        f"Table index {configured} out of range. "
+                        f"Found {total} tables."
+                    )
+                return None
+            return configured
+
+        # Verify configured index is still correct.
+        if configured < total and self._table_matches_columns(
+            self._tables[configured], match_cols
+        ):
+            return configured
+
+        # Scan — first table whose header covers match_columns wins.
+        for i, tbl in enumerate(self._tables):
+            if self._table_matches_columns(tbl, match_cols):
+                logger.warning(
+                    f"{self.index_code}: configured table_index "
+                    f"{configured} does not match expected columns "
+                    f"{match_cols}; falling back to table_index {i}. "
+                    f"Likely a Wikipedia banner shift — update the "
+                    f"config when convenient."
+                )
+                return i
+
+        if strict:
+            raise WikipediaIndexParserError(
+                f"No table matches expected columns {match_cols} for "
+                f"{self.index_code}. Found {total} tables."
+            )
+        return None
+
+    def _apply_symbol_suffix(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Append ``config['symbol_suffix']`` to every symbol that
+        doesn't already end with it.
+
+        Purpose: Wikipedia tables list bare tickers (``AAL``, ``AZN``),
+        but YFinance disambiguates exchanges by suffix (``AAL.L`` =
+        Anglo American on LSE, ``AAL`` = American Airlines on NASDAQ).
+        Storing the suffixed form in FinBase prevents silent
+        mis-mapping when external code queries by symbol.
+
+        Idempotent: running twice is a no-op because the second pass
+        sees every row already suffixed. Empty/missing ``symbol_suffix``
+        is a no-op too, which is what SP500/NDX/DOW30 rely on.
+        """
+        suffix = self.config.get('symbol_suffix')
+        if not suffix:
+            return df
+        already = df['symbol'].str.endswith(suffix, na=False)
+        df.loc[~already, 'symbol'] = df.loc[~already, 'symbol'] + suffix
+        return df
+
     def get_constituents(self) -> pd.DataFrame:
         """
         Extract current constituents using config mapping.
@@ -165,14 +272,8 @@ class WikipediaIndexParser:
             if not table_config:
                 raise WikipediaIndexParserError(f"No constituents_table config for {self.index_code}")
 
-            table_index = table_config['table_index']
             column_mapping = table_config['column_mapping']
-
-            # Get the table
-            if table_index >= len(self._tables):
-                raise WikipediaIndexParserError(
-                    f"Table index {table_index} out of range. Found {len(self._tables)} tables."
-                )
+            table_index = self._resolve_table_index(table_config, strict=True)
 
             constituents = self._tables[table_index].copy()
             logger.info(f"Extracted table {table_index} with {len(constituents)} rows")
@@ -191,6 +292,11 @@ class WikipediaIndexParser:
 
             # Clean symbol column
             constituents['symbol'] = constituents['symbol'].str.strip().str.upper()
+
+            # Apply per-index exchange suffix (AAL -> AAL.L for FTSE100).
+            # Runs after strip+upper so whitespace/case variation in the
+            # raw cells can't defeat the idempotency check.
+            constituents = self._apply_symbol_suffix(constituents)
 
             # Clean company_name if present
             if 'company_name' in constituents.columns:
@@ -211,6 +317,8 @@ class WikipediaIndexParser:
             logger.info(f"Extracted {len(constituents)} constituents for {self.index_code}")
             return constituents
 
+        except WikipediaIndexParserError:
+            raise
         except Exception as e:
             raise WikipediaIndexParserError(f"Failed to extract constituents for {self.index_code}: {e}")
 
@@ -233,13 +341,16 @@ class WikipediaIndexParser:
                 logger.info(f"No changes_table config for {self.index_code}, skipping")
                 return None
 
-            table_index = table_config['table_index']
             column_mapping = table_config['column_mapping']
             has_multiindex = table_config.get('has_multiindex_columns', False)
 
-            # Get the table
-            if table_index >= len(self._tables):
-                logger.warning(f"Changes table index {table_index} out of range, skipping")
+            # Soft-fail on missing/mismatched changes table — this is an
+            # optional data product, callers already handle None.
+            table_index = self._resolve_table_index(table_config, strict=False)
+            if table_index is None:
+                logger.warning(
+                    f"Changes table not found for {self.index_code}, skipping"
+                )
                 return None
 
             changes = self._tables[table_index].copy()
@@ -319,3 +430,101 @@ class WikipediaIndexParser:
             summary['country'] = self.config['country']
 
         return summary
+
+    def get_summary_stats(self) -> Dict:
+        """
+        Richer summary including changes metadata.
+
+        Builds on `get_summary()` and adds the historical-changes view —
+        total change count, the five most recent additions and removals,
+        and a `data_date` ISO timestamp. Indices without a changes table
+        get empty lists for additions/removals and zero for total_changes.
+        """
+        summary = self.get_summary()
+        summary['data_date'] = datetime.now().isoformat()
+
+        changes = self.get_changes()
+        if changes is None or changes.empty:
+            summary['total_changes'] = 0
+            summary['recent_additions'] = []
+            summary['recent_removals'] = []
+            return summary
+
+        summary['total_changes'] = len(changes)
+
+        recent = changes.head(10)
+        if 'added_ticker' in recent.columns:
+            additions = recent[recent['added_ticker'].notna()][
+                [c for c in ('date', 'added_ticker', 'added_company') if c in recent.columns]
+            ].head(5)
+            summary['recent_additions'] = additions.to_dict('records')
+        else:
+            summary['recent_additions'] = []
+
+        if 'removed_ticker' in recent.columns:
+            removals = recent[recent['removed_ticker'].notna()][
+                [c for c in ('date', 'removed_ticker', 'removed_company') if c in recent.columns]
+            ].head(5)
+            summary['recent_removals'] = removals.to_dict('records')
+        else:
+            summary['recent_removals'] = []
+
+        return summary
+
+    def export_to_csv(
+        self,
+        output_dir: str = ".",
+        prefix: Optional[str] = None,
+    ) -> Dict[str, Optional[str]]:
+        """
+        Export constituents (and changes if available) to timestamped CSVs.
+
+        Args:
+            output_dir: Directory for output files. Created if missing.
+            prefix: Filename prefix (default: lower-case index code, e.g. 'sp500').
+
+        Returns:
+            Dict mapping {'constituents': path, 'changes': path-or-None}.
+        """
+        return self._export(output_dir, prefix, fmt='csv')
+
+    def export_to_json(
+        self,
+        output_dir: str = ".",
+        prefix: Optional[str] = None,
+    ) -> Dict[str, Optional[str]]:
+        """JSON twin of `export_to_csv`. See that method for arguments."""
+        return self._export(output_dir, prefix, fmt='json')
+
+    def _export(
+        self,
+        output_dir: str,
+        prefix: Optional[str],
+        fmt: str,
+    ) -> Dict[str, Optional[str]]:
+        if prefix is None:
+            prefix = self.index_code.lower()
+
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d")
+        ext = fmt
+
+        constituents = self.get_constituents()
+        constituents_path = os.path.join(output_dir, f"{prefix}_constituents_{timestamp}.{ext}")
+        if fmt == 'csv':
+            constituents.to_csv(constituents_path, index=False)
+        else:
+            constituents.to_json(constituents_path, orient='records', date_format='iso', indent=2)
+        logger.info(f"Exported {self.index_code} constituents to {constituents_path}")
+
+        changes = self.get_changes()
+        changes_path: Optional[str] = None
+        if changes is not None and not changes.empty:
+            changes_path = os.path.join(output_dir, f"{prefix}_changes_{timestamp}.{ext}")
+            if fmt == 'csv':
+                changes.to_csv(changes_path, index=False)
+            else:
+                changes.to_json(changes_path, orient='records', date_format='iso', indent=2)
+            logger.info(f"Exported {self.index_code} changes to {changes_path}")
+
+        return {'constituents': constituents_path, 'changes': changes_path}

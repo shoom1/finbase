@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-04-22
+
+### Added
+- **`symbol_suffix` config field** for `WikipediaIndexParser`. FTSE100
+  tickers scraped from Wikipedia are bare (`AAL`, `AZN`) but YFinance
+  uses those same symbols for US companies (`AAL` = American Airlines).
+  Setting `"symbol_suffix": ".L"` in `ftse100.json` makes the parser
+  emit `AAL.L`, `AZN.L`, …, so FinBase stores LSE tickers
+  unambiguously. Idempotent — symbols already suffixed are untouched.
+- **`match_columns` config field** for `WikipediaIndexParser`. Identifies
+  the target table by column headers (structural match) rather than
+  positional `table_index`. Protects against Wikipedia fundraising
+  banners and other one-off tables that shift subsequent indices.
+  Parser logs a warning and uses the first table whose header is a
+  superset of `match_columns`; opt-in and backward-compatible.
+  Applied to all 5 shipped configs (SP500, DOW30, NDX, FTSE100, DAX).
+- **`EquityLoader(ticker_factory=...)`** dependency injection, mirroring
+  `MarketCapEnricher`. Alternate data sources and tests no longer need
+  to monkeypatch the module-level `yfinance`.
+- **`IndexDB`** accepts a `sqlite3.Connection` directly; still accepts
+  a `TimeSeriesDB` for backwards compatibility. Stops reaching into
+  `TimeSeriesDB`'s private `.conn` attribute from inside IndexDB.
+- Test coverage: `TimeSeriesValidator` (previously 206 LOC with zero
+  tests), `EquityLoader` DI contract, `IndexDB` connection API,
+  `setup_database.py` import safety, parser robustness.
+
+### Changed
+- **FTSE100 constituents now stored with `.L` suffix** in
+  `index_constituents` and loaded under `.L` in `risk_factors`.
+  Back-translation of the existing rows was a one-time SQL update on
+  2026-04-20; the parser/config change on this release makes it
+  permanent for future `--update-index FTSE100` runs.
+- `scripts/setup_database.py`: `configure_application_logging()` moved
+  from module scope into `main()`. Importing the script no longer
+  reconfigures global logging or creates a `logs/` directory.
+- `scripts/setup_database.py`: exits with status 1 when
+  `load_index_constituents` reports a non-zero error count, so CI /
+  shell automation can detect partial failures.
+- Example scripts call `configure_application_logging()` explicitly so
+  library output reaches the terminal.
+- `TimeSeriesDB.get_risk_factor_info()` now wraps `sqlite3.Error` as
+  `DatabaseError`, matching every other read path.
+
+### Fixed
+- `TimeSeriesDB.query()` with `start_date=None` or `end_date=None`
+  built a `WHERE date >= NULL` clause that silently returned zero
+  rows. None bounds now omit their predicate entirely (open range).
+- `EquityRiskFactorGroup` god-class split: Wikipedia scraping moved to
+  `WikipediaIndexParser`, market-cap enrichment moved to
+  `MarketCapEnricher`. `EquityRiskFactorGroup` now holds only the
+  subset / top-N operations that depend on an already-loaded group.
+
+---
+
 ## [0.1.1] - 2026-04-10
 
 ### Changed

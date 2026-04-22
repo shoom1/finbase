@@ -3,7 +3,7 @@
 import yfinance as yf
 import pandas as pd
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 from datetime import datetime
 
 from ..database.timeseries_db import TimeSeriesDB, DatabaseError, ValidationError
@@ -23,27 +23,50 @@ class LoaderError(Exception):
 class EquityLoader:
     """Loader for equity data from YFinance with rate limiting."""
 
-    def __init__(self, db: TimeSeriesDB, delay_seconds: float = 5.0, batch_size: int = 10, batch_pause: float = 30.0):
+    def __init__(
+        self,
+        db: TimeSeriesDB,
+        delay_seconds: Optional[float] = None,
+        batch_size: Optional[int] = None,
+        batch_pause: Optional[float] = None,
+        ticker_factory: Optional[Callable[[str], object]] = None,
+    ):
         """
-        Initialize equity loader with conservative rate limiting.
+        Initialize equity loader with rate limiting.
+
+        Any rate-limit argument left as ``None`` is resolved from
+        ``Settings.rate_limit`` at construction time, so values flow from
+        ``~/.finbaserc`` or ``FINBASE_YFINANCE_*`` env vars without the
+        caller having to know they exist.
 
         Args:
             db: TimeSeriesDB instance
-            delay_seconds: Delay between each symbol request (default: 5s)
-            batch_size: Number of symbols before longer pause (default: 10)
-            batch_pause: Additional pause after each batch (default: 30s)
+            delay_seconds: Delay between each symbol request. Defaults to
+                ``settings.rate_limit.yfinance_delay_seconds`` (5s).
+            batch_size: Number of symbols before a longer pause. Defaults
+                to ``settings.rate_limit.yfinance_batch_size`` (10).
+            batch_pause: Additional pause after each batch. Defaults to
+                ``settings.rate_limit.yfinance_batch_pause`` (30s).
+            ticker_factory: Callable ``f(symbol) -> ticker`` returning an
+                object with a ``history(start, end, auto_adjust)`` method
+                (the yfinance ``Ticker`` contract). Defaults to
+                ``yfinance.Ticker`` but is injectable so tests and
+                alternate data sources don't need to monkeypatch globals.
+                Mirrors ``MarketCapEnricher.ticker_factory``.
 
         Raises:
             LoaderError: If validation fails
-
-        Note:
-            YFinance has rate limits. Conservative defaults:
-            - 5s between stocks
-            - 30s pause every 10 stocks
-            - Recommended: max 10 stocks per session per day
         """
         if not isinstance(db, TimeSeriesDB):
             raise LoaderError("db must be a TimeSeriesDB instance")
+
+        rate_limit = get_settings().rate_limit
+        if delay_seconds is None:
+            delay_seconds = rate_limit.yfinance_delay_seconds
+        if batch_size is None:
+            batch_size = rate_limit.yfinance_batch_size
+        if batch_pause is None:
+            batch_pause = rate_limit.yfinance_batch_pause
 
         if delay_seconds < 0:
             raise LoaderError("delay_seconds must be non-negative")
@@ -58,7 +81,19 @@ class EquityLoader:
         self.delay_seconds = delay_seconds
         self.batch_size = batch_size
         self.batch_pause = batch_pause
+        self._ticker_factory = ticker_factory
         self.request_count = 0
+
+    def _make_ticker(self, symbol: str):
+        """Resolve the ticker object for ``symbol``.
+
+        Read at call time (not constructor time) so tests that
+        monkeypatch ``equity_loader.yf`` after instance creation still
+        take effect — the historical contract this module exposes.
+        """
+        if self._ticker_factory is not None:
+            return self._ticker_factory(symbol)
+        return yf.Ticker(symbol)
 
     def _has_existing_data(self, symbol: str, data_source: str = 'yfinance') -> bool:
         """
@@ -159,7 +194,7 @@ class EquityLoader:
         last_error = None
         for attempt in range(max_retries):
             try:
-                ticker = yf.Ticker(symbol)
+                ticker = self._make_ticker(symbol)
                 df = ticker.history(start=start_date, end=end_date, auto_adjust=False)
                 self.request_count += 1
 

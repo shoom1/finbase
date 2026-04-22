@@ -3,12 +3,15 @@
   "index_name": "FTSE 100",
   "description": "FTSE 100 Index - 100 largest companies on London Stock Exchange",
   "country": "GB",
+  "currency": "GBP",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/FTSE_100_Index",
+  "symbol_suffix": ".L",
 
   "constituents_table": {
     "table_index": 6,
+    "match_columns": ["Ticker", "Company"],
     "column_mapping": {
       "Company": "company_name",
       "Ticker": "symbol",

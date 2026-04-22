@@ -3,12 +3,14 @@
   "index_name": "DAX",
   "description": "DAX Index - 40 largest German companies on Frankfurt Stock Exchange",
   "country": "DE",
+  "currency": "EUR",
   "asset_class": "equity",
   "data_source": "wikipedia",
   "url": "https://en.wikipedia.org/wiki/DAX",
 
   "constituents_table": {
     "table_index": 4,
+    "match_columns": ["Ticker", "Company", "Prime Standard Sector"],
     "column_mapping": {
       "Ticker": "symbol",
       "Company": "company_name",

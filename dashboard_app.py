@@ -11,9 +11,11 @@ from plotly.subplots import make_subplots
 import pandas as pd
 from datetime import datetime
 
-from src.dashboard import DashboardDataService
-from src.config import get_settings
-from src.utils.logging import get_logger
+from finbase.dashboard import DashboardDataService
+from finbase.config import get_settings
+from finbase.utils.logging import configure_application_logging, get_logger
+
+configure_application_logging()
 
 # Configure page
 st.set_page_config(

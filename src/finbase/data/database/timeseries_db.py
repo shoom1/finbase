@@ -56,9 +56,14 @@ class TimeSeriesDB:
             db_path = get_settings().database.path
 
         self.db_path = Path(db_path).expanduser()
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = None
-        self._connect()
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._connect()
+        except DatabaseError:
+            raise
+        except Exception as e:
+            raise DatabaseError(f"Failed to initialize database at {self.db_path}: {e}")
 
     def _connect(self, max_retries: int = 3):
         """
@@ -344,8 +349,8 @@ class TimeSeriesDB:
     def query(
         self,
         symbols: List[str],
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         column: str = 'adj_close',
         asset_class: Optional[str] = None,
         data_source: str = 'yfinance'
@@ -355,8 +360,8 @@ class TimeSeriesDB:
 
         Args:
             symbols: List of symbols to query
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
+            start_date: Start date (YYYY-MM-DD). If None, no lower bound.
+            end_date: End date (YYYY-MM-DD). If None, no upper bound.
             column: Column to return (close, adj_close, open, high, low, volume)
             asset_class: Optional asset class filter
             data_source: Data source filter
@@ -380,12 +385,17 @@ class TimeSeriesDB:
                 f"Invalid column '{column}'. Must be one of: {VALID_QUERY_COLUMNS}"
             )
 
-        # Validate date format
-        try:
-            pd.to_datetime(start_date)
-            pd.to_datetime(end_date)
-        except Exception as e:
-            raise ValidationError(f"Invalid date format (use YYYY-MM-DD): {e}")
+        # Validate date format only when supplied (None means "no bound")
+        if start_date is not None:
+            try:
+                pd.to_datetime(start_date)
+            except Exception as e:
+                raise ValidationError(f"Invalid start_date format (use YYYY-MM-DD): {e}")
+        if end_date is not None:
+            try:
+                pd.to_datetime(end_date)
+            except Exception as e:
+                raise ValidationError(f"Invalid end_date format (use YYYY-MM-DD): {e}")
 
         try:
             cursor = self.conn.cursor()
@@ -424,20 +434,29 @@ class TimeSeriesDB:
 
                 rf_id = symbol_to_id[symbol]
 
-                # Safe to use column in f-string after validation
-                query_sql = f"""
-                    SELECT date, {column}
-                    FROM timeseries_data
-                    WHERE risk_factor_id = ?
-                    AND date >= ?
-                    AND date <= ?
-                    ORDER BY date
-                """
+                # Build WHERE clause dynamically so None bounds become open ranges.
+                # Comparing date columns against SQL NULL yields NULL (falsy),
+                # which would silently drop every row — hence the conditional
+                # predicate construction below.
+                where_clauses = ["risk_factor_id = ?"]
+                params: List = [rf_id]
+                if start_date is not None:
+                    where_clauses.append("date >= ?")
+                    params.append(start_date)
+                if end_date is not None:
+                    where_clauses.append("date <= ?")
+                    params.append(end_date)
+
+                # Safe to use column in f-string after allowlist validation.
+                query_sql = (
+                    f"SELECT date, {column} FROM timeseries_data "
+                    f"WHERE {' AND '.join(where_clauses)} ORDER BY date"
+                )
 
                 df = pd.read_sql_query(
                     query_sql,
                     self.conn,
-                    params=(rf_id, start_date, end_date),
+                    params=tuple(params),
                     parse_dates=['date'],
                     index_col='date'
                 )
@@ -462,20 +481,27 @@ class TimeSeriesDB:
             raise DatabaseError(f"Unexpected error querying data: {e}")
 
     def get_risk_factor_info(self, symbol: str, data_source: str = 'yfinance') -> Optional[Dict]:
-        """Get metadata for a risk factor."""
-        cursor = self.conn.cursor()
+        """Get metadata for a risk factor.
 
-        cursor.execute(
-            """
-            SELECT *
-            FROM risk_factors
-            WHERE symbol = ?
-            AND data_source = ?
-            """,
-            (symbol, data_source)
-        )
+        Returns None if the symbol+data_source pair is not present.
+        Raises DatabaseError on any sqlite failure so callers see the same
+        exception type as every other read path on this class.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT *
+                FROM risk_factors
+                WHERE symbol = ?
+                AND data_source = ?
+                """,
+                (symbol, data_source)
+            )
+            row = cursor.fetchone()
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get risk factor info for {symbol}: {e}")
 
-        row = cursor.fetchone()
         if not row:
             return None
 
@@ -515,6 +541,100 @@ class TimeSeriesDB:
 
         df = pd.read_sql_query(sql, self.conn, params=params)
         return df
+
+    def count_timeseries_rows(self) -> int:
+        """
+        Count all rows in the timeseries_data table.
+
+        Returns:
+            Total number of OHLCV records across all risk factors.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM timeseries_data")
+            return int(cursor.fetchone()[0])
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to count timeseries rows: {e}")
+
+    def get_timeseries_date_bounds(self) -> tuple:
+        """
+        Get the earliest and latest date present in timeseries_data.
+
+        Returns:
+            Tuple of (min_date, max_date) as ISO-format strings, or
+            (None, None) if the table is empty.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT MIN(date), MAX(date) FROM timeseries_data")
+            row = cursor.fetchone()
+            return (row[0], row[1])
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get timeseries date bounds: {e}")
+
+    def get_latest_update_timestamp(self) -> Optional[str]:
+        """
+        Get the most recent last_updated timestamp across all risk factors.
+
+        Returns:
+            Timestamp string of the most recent risk factor update, or
+            None if no risk factors exist.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT MAX(last_updated) FROM risk_factors")
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get latest update timestamp: {e}")
+
+    def get_coverage_summary(self) -> pd.DataFrame:
+        """
+        Get a per-symbol coverage summary joining risk_factors and timeseries_data.
+
+        For each active risk factor, returns its metadata alongside the count
+        and date range of its actual timeseries rows.
+
+        Returns:
+            DataFrame with columns:
+                symbol, asset_class, sector, start_date, end_date,
+                data_points, actual_start, actual_end
+            Empty DataFrame if no active risk factors exist.
+
+        Raises:
+            DatabaseError: If the query fails.
+        """
+        try:
+            sql = """
+                SELECT
+                    rf.symbol,
+                    rf.asset_class,
+                    rf.sector,
+                    rf.start_date,
+                    rf.end_date,
+                    COUNT(td.ts_id) AS data_points,
+                    MIN(td.date) AS actual_start,
+                    MAX(td.date) AS actual_end
+                FROM risk_factors rf
+                LEFT JOIN timeseries_data td
+                    ON rf.risk_factor_id = td.risk_factor_id
+                WHERE rf.is_active = 1
+                GROUP BY rf.risk_factor_id, rf.symbol, rf.asset_class,
+                         rf.sector, rf.start_date, rf.end_date
+                ORDER BY rf.asset_class, rf.symbol
+            """
+            return pd.read_sql_query(sql, self.conn)
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get coverage summary: {e}")
 
     def close(self):
         """Close database connection."""
